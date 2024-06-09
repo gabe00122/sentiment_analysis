@@ -1,8 +1,9 @@
 import numpy as np
 import json
 from sentencepiece import SentencePieceProcessor
-import pyarrow as pa
-import pyarrow.parquet as pq
+
+# import pyarrow as pa
+# import pyarrow.parquet as pq
 
 
 def main():
@@ -30,19 +31,26 @@ def main():
                 length_data.append(length)
                 tokens_data.append(tokens + [-1] * (max_length - length))
 
-    schema = pa.schema(
-        [
-            ("stars", pa.int16()),
-            ("length", pa.int16()),
-            ("tokens", pa.list_(pa.int16(), max_length)),
-        ]
+    # schema = pa.schema(
+    #     [
+    #         ("stars", pa.int16()),
+    #         ("length", pa.int16()),
+    #         ("tokens", pa.list_(pa.int16(), max_length)),
+    #     ]
+    # )
+    # table = pa.table(
+    #     [stars_data, length_data, tokens_data],
+    #     schema=schema,
+    # )
+    # pq.write_table(table, "data/training_data.parquet")
+
+    # print(table)
+    tokens = np.array(tokens_data, np.int16)
+    stars = np.array(stars_data, np.int16)
+    lengths = np.array(length_data, np.int16)
+    np.savez_compressed(
+        "data/training_data.npz", tokens=tokens, stars=stars, lengths=lengths
     )
-    table = pa.table(
-        [stars_data, length_data, tokens_data],
-        schema=schema,
-    )
-    pq.write_table(table, "data/training_data.parquet")
-    print(table)
 
 
 if __name__ == "__main__":

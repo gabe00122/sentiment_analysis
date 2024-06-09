@@ -5,28 +5,35 @@ import os
 
 import jax
 from jax import random, Array, numpy as jnp
+from jax.typing import ArrayLike
+from flax import linen as nn
 import optax
 from optax.losses import softmax_cross_entropy
 import numpy as np
 import orbax.checkpoint as ocp
 
-from sequence_gym.env import (
-    create_training_batch,
-    create_training_sample,
-    TrainingSample,
+from sentiment_analysis.network import Network
+from sentiment_analysis.positional_embeddings import get_positional_embeddings
+from sentiment_analysis.transformer import Transformer
+from sentiment_analysis.metrics import (
+    Metrics,
+    PandasWriter,
+    MetricsBuffer,
+    create_metrics_buffer,
+    append_buffer,
 )
-from sequence_gym.network import Network
-from sequence_gym.positional_embeddings import get_positional_embeddings
-from sequence_gym.transformer import Transformer
-from sequence_gym.vocab import VocabDescribe
-from sequence_gym.metrics import Metrics, PandasWriter, MetricsBuffer, create_metrics_buffer, append_buffer
 
 
 def main():
+    training_data = jnp.load("./data/training_data.npz")
+    print(training_data)
+    labels = training_data["starts"]  # should be stars or labels
+    tokens = training_data["tokens"]
+
     rng_key = random.PRNGKey(42)
-    vocab = VocabDescribe(10)
+    vocab_size = 2000
     embedding_features = 32
-    sequence_length = 50
+    sequence_length = 128
     num_heads = 8
     batch_size = 64
 
@@ -38,7 +45,7 @@ def main():
 
     network = Network(
         transformer=transformer,
-        seq_length=sequence_length,
+        vocab_size=vocab_size,
         embedding_features=embedding_features,
         position_embeddings=get_positional_embeddings(
             sequence_length, embedding_features
@@ -46,17 +53,23 @@ def main():
     )
 
     param_key, dummy_key, rng_key = random.split(rng_key, 3)
-    dummy_batch = create_training_sample(dummy_key, vocab, sequence_length)
+    dummy_tokens = jnp.zeros(sequence_length, jnp.int16)
 
-    network_params = network.init(param_key, dummy_batch.sequence)
+    network_params = network.init(param_key, dummy_tokens)
 
     optimizer = optax.adam(
-        learning_rate=optax.warmup_cosine_decay_schedule(0.0025/2, 0.0025, 1_000, 9_000)
+        learning_rate=optax.warmup_cosine_decay_schedule(
+            0.0025 / 2, 0.0025, 1_000, 9_000
+        )
     )
     opt_state = optimizer.init(network_params)
 
-    static_state = StaticState(network, optimizer, batch_size, sequence_length, vocab)
-    training_state = TrainingState(rng_key, network_params, opt_state)
+    rng_key, indices_key = random.split(rng_key)
+    indices = jnp.arange(tokens.size)
+    indices = random.permutation(indices_key, indices)
+
+    static_state = StaticState(network, optimizer, batch_size, tokens, labels)
+    training_state = TrainingState(rng_key, network_params, opt_state, indices, 0)
 
     total_steps = 10_000
     writter = PandasWriter(Path("./metrics_glort.parquet"))
@@ -65,29 +78,38 @@ def main():
         if i == 0:
             print("Compilation started")
 
-        #training_state, metrics = training_step(static_state, training_state)
+        # training_state, metrics = training_step(static_state, training_state)
         training_state, metrics = train_loop(static_state, training_state)
         writter.write(metrics)
 
-        #if i == 0:
+        # if i == 0:
         print("Compilation finished")
 
-        #if i % 100 == 99:
+        # if i % 100 == 99:
         print(f"{i}: {metrics.values["loss"][metrics.length - 1].item()}")
 
     writter.flush()
     save_model("models", training_state.params)
 
 
+class TrainingSample(NamedTuple):
+    tokens: Array
+    mask: Array
+    labels: Array
+
+
 def loss(network: Network, params, training_batch: TrainingSample):
     vec_network = jax.vmap(network.apply, in_axes=(None, 0, 0))
 
-    logits = vec_network(params, training_batch.sequence, training_batch.mask)
-    mean_cross_entropy = jnp.mean(softmax_cross_entropy(logits, training_batch.label))
+    logits = vec_network(params, training_batch.tokens, training_batch.mask)
+    mean_cross_entropy = jnp.mean(
+        softmax_cross_entropy(logits, nn.one_hot(training_batch.labels, 5))
+    )
 
     logits_indices = jnp.argmax(logits, axis=1)
-    label_indices = jnp.argmax(training_batch.label, axis=1)
-    percent_correct = jnp.mean(logits_indices == label_indices, dtype=jnp.float32)
+    percent_correct = jnp.mean(
+        logits_indices == training_batch.labels, dtype=jnp.float32
+    )
     metrics = {"percent_correct": percent_correct}
 
     return mean_cross_entropy, metrics
@@ -97,17 +119,19 @@ class StaticState(NamedTuple):
     network: Network
     solver: Any
     batch_size: int
-    seq_length: int
-    vocab: VocabDescribe
+    tokens: Array
+    labels: Array
 
 
 class TrainingState(NamedTuple):
     rng_key: Array
     params: Any
     opt_state: Any
+    indices: Array
+    batch_index: ArrayLike
 
 
-#@partial(jax.jit, static_argnums=0)
+# @partial(jax.jit, static_argnums=0)
 def training_step(
     static_state: StaticState, state: TrainingState
 ) -> tuple[TrainingState, Metrics]:
@@ -116,9 +140,15 @@ def training_step(
     rng_key = keys[0]
     sample_keys = keys[1:]
 
-    sample = create_training_batch(
-        sample_keys, static_state.vocab, static_state.seq_length
-    )
+    start_slice = state.batch_index * static_state.batch_size
+    end_slice = start_slice + static_state.batch_size
+
+    indices = state.indices[start_slice:end_slice]
+    tokens = static_state.tokens[indices]
+    labels = static_state.labels[indices]
+    mask = tokens != -1
+
+    sample = TrainingSample(tokens=tokens, labels=labels, mask=mask)
 
     (loss_value, metrics), grad = jax.value_and_grad(loss, argnums=1, has_aux=True)(
         static_state.network, state.params, sample
@@ -130,6 +160,8 @@ def training_step(
         rng_key=rng_key,
         params=params,
         opt_state=opt_state,
+        indices=state.indices,
+        batch_index=state.batch_index + 1,
     )
 
     # for path, leaf in jax.tree_util.tree_leaves_with_path(grad):
@@ -144,7 +176,9 @@ def training_step(
 
 
 @partial(jax.jit, static_argnums=0)
-def train_loop(static_state: StaticState, state: TrainingState) -> tuple[TrainingState, MetricsBuffer]:
+def train_loop(
+    static_state: StaticState, state: TrainingState
+) -> tuple[TrainingState, MetricsBuffer]:
     loop_count = 500
     state, metrics = training_step(static_state, state)
     metrics_buffer = create_metrics_buffer(metrics, loop_count)
