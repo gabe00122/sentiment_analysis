@@ -1,3 +1,4 @@
+import jax
 from flax import linen as nn
 from jax import Array, numpy as jnp
 
@@ -19,8 +20,10 @@ class Network(nn.Module):
                 self.embedding_features ** -(1 / 2), "fan_in", "normal", out_axis=0
             ),
             # param_dtype=jnp.float16,
+            # dtype=jnp.float16
         )(inputs)
         embeddings = token_embeddings + self.position_embeddings
+
         return self.transformer(embeddings, mask)
 
     def __hash__(self):

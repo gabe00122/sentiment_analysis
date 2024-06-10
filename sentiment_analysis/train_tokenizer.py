@@ -5,7 +5,7 @@ from sentencepiece import SentencePieceTrainer
 
 def generate_corpus(output_path: Path, size: int):
     data_file = open(
-        "/Users/gabrielkeith/Downloads/yelp_dataset/yelp_academic_dataset_review.json",
+        "./data/yelp_academic_dataset_review.json",
         "r",
     )
 
@@ -27,7 +27,7 @@ def main():
     SentencePieceTrainer.train(
         input=corpus_path,
         model_prefix="tokenizer",
-        vocab_size=4000,
+        vocab_size=2000,
     )
 
 

@@ -9,4 +9,4 @@ def get_positional_embeddings(seq_length, features, n=10000):
             denominator = np.power(n, 2*i/features)
             output[k, 2*i] = np.sin(k/denominator)
             output[k, 2*i+1] = np.cos(k/denominator)
-    return jnp.asarray(output)
+    return jnp.asarray(output, dtype=jnp.float32)

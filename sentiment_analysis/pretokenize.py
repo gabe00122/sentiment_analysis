@@ -9,9 +9,9 @@ from sentencepiece import SentencePieceProcessor
 def main():
     max_length = 128
 
-    processor = SentencePieceProcessor(model_file="l.model")
+    processor = SentencePieceProcessor(model_file="tokenizer.model")
     data_path = (
-        "/Users/gabrielkeith/Downloads/yelp_dataset/yelp_academic_dataset_review.json"
+        "./data/yelp_academic_dataset_review.json"
     )
 
     stars_data = []

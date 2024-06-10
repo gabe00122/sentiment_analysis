@@ -27,20 +27,23 @@ from sentiment_analysis.metrics import (
 def main():
     training_data = jnp.load("./data/training_data.npz")
     print(training_data)
-    labels = training_data["starts"]  # should be stars or labels
-    tokens = training_data["tokens"]
+    data_size = 25_000 * 128
+    print(training_data["tokens"].shape)
+    labels = training_data["stars"][:data_size]  # should be stars or labels
+    tokens = training_data["tokens"][:data_size]
+    del training_data
 
     rng_key = random.PRNGKey(42)
     vocab_size = 2000
-    embedding_features = 32
+    embedding_features = 64
     sequence_length = 128
     num_heads = 8
-    batch_size = 64
+    batch_size = 128
 
     transformer = Transformer(
         num_heads=num_heads,
         token_features=embedding_features,
-        num_layers=6,
+        num_layers=12,
     )
 
     network = Network(
@@ -52,43 +55,48 @@ def main():
         ),
     )
 
-    param_key, dummy_key, rng_key = random.split(rng_key, 3)
+    param_key, rng_key = random.split(rng_key)
     dummy_tokens = jnp.zeros(sequence_length, jnp.int16)
 
     network_params = network.init(param_key, dummy_tokens)
 
     optimizer = optax.adam(
         learning_rate=optax.warmup_cosine_decay_schedule(
-            0.0025 / 2, 0.0025, 1_000, 9_000
+            0.00125 / 10, 0.00125, 1_000, 25_000 * 10
         )
     )
     opt_state = optimizer.init(network_params)
 
-    rng_key, indices_key = random.split(rng_key)
-    indices = jnp.arange(tokens.size)
-    indices = random.permutation(indices_key, indices)
+    indices = jnp.arange(data_size)
 
-    static_state = StaticState(network, optimizer, batch_size, tokens, labels)
-    training_state = TrainingState(rng_key, network_params, opt_state, indices, 0)
+    static_state = StaticState(network, optimizer, batch_size)
+    training_state = TrainingState(rng_key, network_params, opt_state, indices, 0, tokens, labels)
 
-    total_steps = 10_000
-    writter = PandasWriter(Path("./metrics_glort.parquet"))
+    total_steps = 25_000
+    writer = PandasWriter(Path("./metrics_glort.parquet"))
 
-    for i in range(total_steps // 500):
-        if i == 0:
-            print("Compilation started")
+    for _ in range(10):
+        rng_key, indices_key = random.split(training_state.rng_key)
+        indices = random.permutation(indices_key, training_state.indices)
 
-        # training_state, metrics = training_step(static_state, training_state)
-        training_state, metrics = train_loop(static_state, training_state)
-        writter.write(metrics)
+        training_state = training_state._replace(batch_index=0, indices=indices, rng_key=rng_key)
 
-        # if i == 0:
-        print("Compilation finished")
+        for i in range(total_steps // 500):
+            if i == 0:
+                print("Compilation started")
 
-        # if i % 100 == 99:
-        print(f"{i}: {metrics.values["loss"][metrics.length - 1].item()}")
+            # training_state, metrics = training_step(static_state, training_state)
+            training_state, metrics = train_loop(static_state, training_state)
+            writer.write(metrics)
 
-    writter.flush()
+            if i == 0:
+                print("Compilation finished")
+
+            # if i % 100 == 99:
+            print(f"{i}: {metrics.values["loss"][metrics.length - 1].item()}")
+            print(f"{metrics.values["percent_correct"][metrics.length - 1].item()}")
+
+    writer.flush()
     save_model("models", training_state.params)
 
 
@@ -102,13 +110,14 @@ def loss(network: Network, params, training_batch: TrainingSample):
     vec_network = jax.vmap(network.apply, in_axes=(None, 0, 0))
 
     logits = vec_network(params, training_batch.tokens, training_batch.mask)
+    hot_labels = nn.one_hot(training_batch.labels - 1, 5)
     mean_cross_entropy = jnp.mean(
-        softmax_cross_entropy(logits, nn.one_hot(training_batch.labels, 5))
+        softmax_cross_entropy(logits, hot_labels)
     )
 
     logits_indices = jnp.argmax(logits, axis=1)
     percent_correct = jnp.mean(
-        logits_indices == training_batch.labels, dtype=jnp.float32
+        logits_indices == training_batch.labels - 1, dtype=jnp.float32
     )
     metrics = {"percent_correct": percent_correct}
 
@@ -119,8 +128,6 @@ class StaticState(NamedTuple):
     network: Network
     solver: Any
     batch_size: int
-    tokens: Array
-    labels: Array
 
 
 class TrainingState(NamedTuple):
@@ -129,6 +136,8 @@ class TrainingState(NamedTuple):
     opt_state: Any
     indices: Array
     batch_index: ArrayLike
+    tokens: Array
+    labels: Array
 
 
 # @partial(jax.jit, static_argnums=0)
@@ -141,11 +150,13 @@ def training_step(
     sample_keys = keys[1:]
 
     start_slice = state.batch_index * static_state.batch_size
-    end_slice = start_slice + static_state.batch_size
+    # end_slice = start_slice + static_state.batch_size
 
-    indices = state.indices[start_slice:end_slice]
-    tokens = static_state.tokens[indices]
-    labels = static_state.labels[indices]
+    indices = jax.lax.dynamic_slice(state.indices, (start_slice,), (static_state.batch_size,))
+    # jax.debug.breakpoint()
+
+    tokens = state.tokens[indices]
+    labels = state.labels[indices]
     mask = tokens != -1
 
     sample = TrainingSample(tokens=tokens, labels=labels, mask=mask)
@@ -156,12 +167,16 @@ def training_step(
     updates, opt_state = static_state.solver.update(grad, state.opt_state, state.params)
     params = optax.apply_updates(state.params, updates)
 
+    # jax.debug.breakpoint()
+
     state = TrainingState(
         rng_key=rng_key,
         params=params,
         opt_state=opt_state,
         indices=state.indices,
         batch_index=state.batch_index + 1,
+        tokens=state.tokens,
+        labels=state.labels,
     )
 
     # for path, leaf in jax.tree_util.tree_leaves_with_path(grad):
@@ -175,7 +190,7 @@ def training_step(
     return state, metrics
 
 
-@partial(jax.jit, static_argnums=0)
+@partial(jax.jit, static_argnums=0, donate_argnums=1)
 def train_loop(
     static_state: StaticState, state: TrainingState
 ) -> tuple[TrainingState, MetricsBuffer]:

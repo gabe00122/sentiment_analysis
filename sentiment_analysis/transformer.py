@@ -1,3 +1,4 @@
+import jax
 import flax.linen as nn
 
 
@@ -56,7 +57,7 @@ class Transformer(nn.Module):
         )
 
         x = inputs
-        for _ in range(self.num_layers):
+        for i in range(self.num_layers):
             x = TransformerLayer(
                 num_heads=self.num_heads,
                 token_features=self.token_features,
@@ -65,9 +66,11 @@ class Transformer(nn.Module):
 
         # x = nn.LayerNorm()(x)
         x = nn.DenseGeneral(
-            features=self.vocab_size,
+            features=5,
             axis=(0, 1),
             kernel_init=kernel_init,
         )(x)
+
+        # jax.debug.breakpoint()
 
         return x
