@@ -1,20 +1,16 @@
+import os
+from functools import partial
 from pathlib import Path
 from typing import NamedTuple, Any
-from functools import partial
-import os
 
 import jax
+import optax
+import orbax.checkpoint as ocp
+from flax import linen as nn
 from jax import random, Array, numpy as jnp
 from jax.typing import ArrayLike
-from flax import linen as nn
-import optax
 from optax.losses import softmax_cross_entropy
-import numpy as np
-import orbax.checkpoint as ocp
 
-from sentiment_analysis.network import Network
-from sentiment_analysis.positional_embeddings import get_positional_embeddings
-from sentiment_analysis.transformer import Transformer
 from sentiment_analysis.metrics import (
     Metrics,
     PandasWriter,
@@ -22,28 +18,38 @@ from sentiment_analysis.metrics import (
     create_metrics_buffer,
     append_buffer,
 )
+from sentiment_analysis.network import Network
+from sentiment_analysis.positional_embeddings import get_positional_embeddings
+from sentiment_analysis.transformer import Transformer
 
 
 def main():
+    total_steps = 25_000
+    epochs = 10
+
+    rng_key = random.PRNGKey(0)
+    vocab_size = 2000
+    embedding_features = 128 * 2
+
+    batch_size = 128
+
+    sequence_length = 128
+    num_heads = 8
+    num_layers = 12
+
+    data_size = total_steps * sequence_length
+
     training_data = jnp.load("./data/training_data.npz")
     print(training_data)
-    data_size = 25_000 * 128
     print(training_data["tokens"].shape)
     labels = training_data["stars"][:data_size]  # should be stars or labels
     tokens = training_data["tokens"][:data_size]
     del training_data
 
-    rng_key = random.PRNGKey(42)
-    vocab_size = 2000
-    embedding_features = 64
-    sequence_length = 128
-    num_heads = 8
-    batch_size = 128
-
     transformer = Transformer(
         num_heads=num_heads,
         token_features=embedding_features,
-        num_layers=12,
+        num_layers=num_layers,
     )
 
     network = Network(
@@ -60,10 +66,13 @@ def main():
 
     network_params = network.init(param_key, dummy_tokens)
 
-    optimizer = optax.adam(
+    optimizer = optax.adamw(
         learning_rate=optax.warmup_cosine_decay_schedule(
-            0.00125 / 10, 0.00125, 1_000, 25_000 * 10
-        )
+            0.000005,0.00125, 2000, total_steps * epochs
+        ),
+        b1=0.9,
+        b2=0.98,
+        weight_decay=0.0001
     )
     opt_state = optimizer.init(network_params)
 
@@ -72,10 +81,9 @@ def main():
     static_state = StaticState(network, optimizer, batch_size)
     training_state = TrainingState(rng_key, network_params, opt_state, indices, 0, tokens, labels)
 
-    total_steps = 25_000
-    writer = PandasWriter(Path("./metrics_glort.parquet"))
+    writer = PandasWriter(Path("./metrics_large_high_lr.parquet"))
 
-    for _ in range(10):
+    for _ in range(epochs):
         rng_key, indices_key = random.split(training_state.rng_key)
         indices = random.permutation(indices_key, training_state.indices)
 
@@ -106,10 +114,10 @@ class TrainingSample(NamedTuple):
     labels: Array
 
 
-def loss(network: Network, params, training_batch: TrainingSample):
-    vec_network = jax.vmap(network.apply, in_axes=(None, 0, 0))
+def loss(network: Network, params, training_batch: TrainingSample, rng_key):
+    #vec_network = jax.vmap(network.apply, in_axes=(None, 0, 0))
 
-    logits = vec_network(params, training_batch.tokens, training_batch.mask)
+    logits = network.apply(params, training_batch.tokens, training_batch.mask, rngs=rng_key)
     hot_labels = nn.one_hot(training_batch.labels - 1, 5)
     mean_cross_entropy = jnp.mean(
         softmax_cross_entropy(logits, hot_labels)
@@ -145,12 +153,9 @@ def training_step(
     static_state: StaticState, state: TrainingState
 ) -> tuple[TrainingState, Metrics]:
     rng_key = state.rng_key
-    keys = random.split(rng_key, static_state.batch_size + 1)
-    rng_key = keys[0]
-    sample_keys = keys[1:]
+    rng_key, dropout_key = random.split(rng_key)
 
     start_slice = state.batch_index * static_state.batch_size
-    # end_slice = start_slice + static_state.batch_size
 
     indices = jax.lax.dynamic_slice(state.indices, (start_slice,), (static_state.batch_size,))
     # jax.debug.breakpoint()
@@ -162,7 +167,7 @@ def training_step(
     sample = TrainingSample(tokens=tokens, labels=labels, mask=mask)
 
     (loss_value, metrics), grad = jax.value_and_grad(loss, argnums=1, has_aux=True)(
-        static_state.network, state.params, sample
+        static_state.network, state.params, sample, rng_key
     )
     updates, opt_state = static_state.solver.update(grad, state.opt_state, state.params)
     params = optax.apply_updates(state.params, updates)

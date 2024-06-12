@@ -12,7 +12,7 @@ from flax import linen as nn
 
 def main():
     vocab_size = 2000
-    embedding_features = 64
+    embedding_features = 64 * 4
     sequence_length = 128
     num_heads = 8
     context_size = 128
@@ -33,7 +33,7 @@ def main():
     )
 
     abstract_tree = get_abstract_tree(network, context_size)
-    params = load_model(Path("./models/1"), abstract_tree)
+    params = load_model(Path("./models_backup2/1"), abstract_tree)
     # print(params)
 
     processor = SentencePieceProcessor(model_file="tokenizer.model")
@@ -48,13 +48,11 @@ def main():
     while True:
         text = input("input: ")
         tokens = processor.Encode(text.lower())
-        tokens_str = processor.Encode(text.lower(), out_type=str)
-
         tokens += [-1] * (context_size - len(tokens))
         tokens = jnp.array(tokens, jnp.int16)
-        print(tokens_str)
-        prediction = inference(tokens).tolist()
-        print(prediction)
+
+        prediction = jnp.argmax(inference(tokens)) + 1
+        print("⭐" * prediction)
 
 
 def get_abstract_tree(network, context_size):

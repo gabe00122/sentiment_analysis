@@ -1,5 +1,6 @@
-import jax
+from jax import numpy as jnp
 import flax.linen as nn
+from sentiment_analysis.attention import MultiHeadDotProductAttention
 
 
 class TransformerLayer(nn.Module):
@@ -13,11 +14,15 @@ class TransformerLayer(nn.Module):
         res = x
 
         x = nn.LayerNorm()(x)
-        x = nn.MultiHeadDotProductAttention(
+        x = MultiHeadDotProductAttention(
             num_heads=self.num_heads,
             qkv_features=self.token_features,
             kernel_init=self.kernel_init,
+            attention_init=nn.initializers.glorot_normal(),
+            dropout_rate=0.1,
+            deterministic=True
         )(x, mask=mask)
+        x = nn.Dropout(rate=0.1, deterministic=True)(x)
 
         x += res
         res = x
@@ -27,11 +32,14 @@ class TransformerLayer(nn.Module):
             features=self.token_features,
             kernel_init=self.kernel_init,
         )(x)
+        x = nn.Dropout(rate=0.1, deterministic=True)(x)
+
         x = nn.relu(x)
         x = nn.Dense(
             features=self.token_features,
             kernel_init=self.kernel_init,
         )(x)
+        x = nn.Dropout(rate=0.1, deterministic=True)(x)
 
         x += res
 
@@ -55,6 +63,8 @@ class Transformer(nn.Module):
             mode="fan_avg",
             distribution="truncated_normal",
         )
+        if mask is not None:
+            mask = nn.make_attention_mask(mask, mask, jnp.logical_and)
 
         x = inputs
         for i in range(self.num_layers):
@@ -67,7 +77,7 @@ class Transformer(nn.Module):
         # x = nn.LayerNorm()(x)
         x = nn.DenseGeneral(
             features=5,
-            axis=(0, 1),
+            axis=(-2, -1),
             kernel_init=kernel_init,
         )(x)
 
