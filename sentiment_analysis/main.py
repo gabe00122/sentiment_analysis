@@ -25,19 +25,19 @@ from sentiment_analysis.transformer import Transformer
 
 def main():
     total_steps = 25_000
-    epochs = 10
+    epochs = 40
 
     rng_key = random.PRNGKey(0)
     vocab_size = 2000
     embedding_features = 128 * 2
 
-    batch_size = 128
+    batch_size = 128 * 2
 
     sequence_length = 128
     num_heads = 8
-    num_layers = 12
+    num_layers = 6
 
-    data_size = total_steps * sequence_length
+    data_size = total_steps * 128
 
     training_data = jnp.load("./data/training_data.npz")
     print(training_data)
@@ -57,7 +57,7 @@ def main():
         vocab_size=vocab_size,
         embedding_features=embedding_features,
         position_embeddings=get_positional_embeddings(
-            sequence_length, embedding_features
+            sequence_length * 2, embedding_features
         ),
     )
 
@@ -68,10 +68,10 @@ def main():
 
     optimizer = optax.adamw(
         learning_rate=optax.warmup_cosine_decay_schedule(
-            0.000005,0.00125, 2000, total_steps * epochs
+            0.000005,0.00125/3, 20000, (data_size // batch_size) * epochs
         ),
-        b1=0.9,
-        b2=0.98,
+        # b1=0.9,
+        # b2=0.98,
         weight_decay=0.0001
     )
     opt_state = optimizer.init(network_params)
@@ -81,7 +81,7 @@ def main():
     static_state = StaticState(network, optimizer, batch_size)
     training_state = TrainingState(rng_key, network_params, opt_state, indices, 0, tokens, labels)
 
-    writer = PandasWriter(Path("./metrics_large_high_lr.parquet"))
+    writer = PandasWriter(Path("./metrics_next.parquet"))
 
     for _ in range(epochs):
         rng_key, indices_key = random.split(training_state.rng_key)
@@ -89,7 +89,7 @@ def main():
 
         training_state = training_state._replace(batch_index=0, indices=indices, rng_key=rng_key)
 
-        for i in range(total_steps // 500):
+        for i in range((data_size // batch_size) // 500):
             if i == 0:
                 print("Compilation started")
 
@@ -105,7 +105,7 @@ def main():
             print(f"{metrics.values["percent_correct"][metrics.length - 1].item()}")
 
     writer.flush()
-    save_model("models", training_state.params)
+    save_model("model_next", training_state.params)
 
 
 class TrainingSample(NamedTuple):

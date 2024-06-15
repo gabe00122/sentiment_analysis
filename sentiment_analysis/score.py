@@ -17,13 +17,13 @@ def main():
 
     rng_key = random.PRNGKey(42)
     vocab_size = 2000
-    embedding_features = 64
+    embedding_features = 128
 
     batch_size = 128
 
     sequence_length = 128
     num_heads = 8
-    num_layers = 12
+    num_layers = 6
 
 
     data_size = total_steps * sequence_length
@@ -41,7 +41,7 @@ def main():
     transformer = Transformer(
         num_heads=num_heads,
         token_features=embedding_features,
-        num_layers=12,
+        num_layers=num_layers,
     )
 
     network = Network(
@@ -49,17 +49,19 @@ def main():
         vocab_size=vocab_size,
         embedding_features=embedding_features,
         position_embeddings=get_positional_embeddings(
-            sequence_length, embedding_features
+            sequence_length * 2, embedding_features
         ),
     )
 
     abstract_tree = get_abstract_tree(network, sequence_length)
-    params = load_model(Path("./models/1"), abstract_tree)
-    # print(params)
+    params = load_model(Path("./metrics_friday/1"), abstract_tree)
+    #param_count = sum(x.size for x in jax.tree_leaves(params))
 
-    unique, counts = jnp.unique(labels, return_counts=True)
-    print(unique)
-    print(counts)
+    #print(param_count)
+
+    #unique, counts = jnp.unique(labels, return_counts=True)
+    #print(unique)
+    #print(counts)
 
     def score(labels, tokens):
         mask = tokens != -1

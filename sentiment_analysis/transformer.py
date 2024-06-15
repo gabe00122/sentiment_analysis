@@ -7,39 +7,40 @@ class TransformerLayer(nn.Module):
     kernel_init: nn.initializers.Initializer
     num_heads: int = 8
     token_features: int = 16
+    training = True
 
     @nn.compact
     def __call__(self, inputs, mask=None):
         x = inputs
         res = x
 
-        x = nn.LayerNorm()(x)
+        #x = nn.LayerNorm()(x)
         x = MultiHeadDotProductAttention(
             num_heads=self.num_heads,
             qkv_features=self.token_features,
             kernel_init=self.kernel_init,
             attention_init=nn.initializers.glorot_normal(),
             dropout_rate=0.1,
-            deterministic=True
+            deterministic=not self.training,
         )(x, mask=mask)
         x = nn.Dropout(rate=0.1, deterministic=True)(x)
 
         x += res
         res = x
 
-        x = nn.LayerNorm()(x)
+        #x = nn.LayerNorm()(x)
         x = nn.Dense(
-            features=self.token_features,
+            features=self.token_features * 4,
             kernel_init=self.kernel_init,
         )(x)
-        x = nn.Dropout(rate=0.1, deterministic=True)(x)
+        x = nn.Dropout(rate=0.1, deterministic=not self.training)(x)
 
         x = nn.relu(x)
         x = nn.Dense(
             features=self.token_features,
             kernel_init=self.kernel_init,
         )(x)
-        x = nn.Dropout(rate=0.1, deterministic=True)(x)
+        x = nn.Dropout(rate=0.1, deterministic=not self.training)(x)
 
         x += res
 
