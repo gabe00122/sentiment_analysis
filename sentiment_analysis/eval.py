@@ -1,4 +1,4 @@
-from sentiment_analysis.network import Transformer, Network
+from sentiment_analysis.model.network import Transformer, Network
 from sentiment_analysis.positional_embeddings import get_positional_embeddings
 import orbax.checkpoint as ocp
 from sentencepiece import SentencePieceProcessor
