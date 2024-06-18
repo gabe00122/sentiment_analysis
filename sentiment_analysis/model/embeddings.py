@@ -1,8 +1,9 @@
-import jax
-from jax import numpy as jnp, random, Array
-from jax.typing import DTypeLike
 import math
+
+import jax
 from flax import nnx
+from jax import numpy as jnp, random
+from jax.typing import DTypeLike
 
 
 def get_positional_embeddings(

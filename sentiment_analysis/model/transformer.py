@@ -1,7 +1,8 @@
-from jax import numpy as jnp, Array
-from jax.typing import DTypeLike
-from flax import nnx
 from typing import Sequence, Callable
+
+from flax import nnx
+from jax import Array
+from jax.typing import DTypeLike
 
 
 class TransformerLayer(nnx.Module):

@@ -1,12 +1,11 @@
 from typing import Sequence
-from functools import partial
 
 from flax import nnx
-from jax.typing import DTypeLike
 from jax import numpy as jnp
+from jax.typing import DTypeLike
 
-from sentiment_analysis.model.transformer import TransformerLayer
 from sentiment_analysis.model.embeddings import PositionalEmbeddings
+from sentiment_analysis.model.transformer import TransformerLayer
 
 
 def get_fixup_scale(transformer_layers: int, fixup_constant: float = 0.67) -> float:
