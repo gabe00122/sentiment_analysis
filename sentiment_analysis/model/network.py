@@ -1,52 +1,115 @@
-import jax.lax
-from flax import linen as nn
-from jax import Array, random, numpy as jnp
+from typing import Sequence
 from functools import partial
 
-from .transformer import Transformer, get_init_scale
+from flax import nnx
+from jax.typing import DTypeLike
+from jax import numpy as jnp
+
+from sentiment_analysis.model.transformer import TransformerLayer
+from sentiment_analysis.model.embeddings import PositionalEmbeddings
 
 
-@partial(jax.vmap, in_axes=(0, None))
-def get_offsets(rngs, position_embeddings):
-    half_size = 128
-    offset = random.randint(rngs, (), 0, half_size)
-    return jax.lax.dynamic_slice(position_embeddings, (offset, 0), (half_size, 128 * 2))
+def get_fixup_scale(transformer_layers: int, fixup_constant: float = 0.67) -> float:
+    return (fixup_constant * transformer_layers) ** -(1 / 4)
 
 
-class Network(nn.Module):
-    vocab_size: int
-    embedding_features: int
-    transformer: Transformer
-    position_embeddings: Array
+def get_embed_scale(embedding_features: int) -> float:
+    return embedding_features ** -(1 / 2)
 
-    @nn.compact
-    def __call__(self, inputs, mask=None):
-        token_embeddings = nn.Embed(
-            num_embeddings=self.vocab_size,
-            features=self.embedding_features,
-            embedding_init=nn.initializers.normal(1.0),
-            # param_dtype=jnp.float16,
-            # dtype=jnp.float16
-        )(inputs)
-        has_batch = len(inputs.shape) > 1
-        position_embeddings = self.position_embeddings
 
-        if has_batch:
-            rng = self.make_rng("params")
-            rngs = random.split(rng, inputs.shape[0])
-            position_embeddings = get_offsets(rngs, position_embeddings)
+class Network(nnx.Module):
+    def __init__(self,
+                 vocab_size: int,
+                 seq_length: int,
+                 output_tokens: int,
+                 embedding_features: int,
+                 transformer_layers: int,
+                 transformer_heads: int,
+                 mlp_features: Sequence[int],
+                 max_position_offset: int,
+                 output_classes: int,
+                 dropout_rate: float,
+                 layer_norm: bool,
+                 fixup_constant: float,
+                 dtype: DTypeLike,
+                 rngs: nnx.Rngs):
+        self.dropout_rate = dropout_rate
+        self.output_tokens = output_tokens
+
+        if fixup_constant > 0.0:
+            kernel_scale = get_fixup_scale(transformer_layers, fixup_constant)
+            embedding_scale = get_embed_scale(embedding_features) * kernel_scale
         else:
-            position_embeddings = position_embeddings[64:128+64]
+            # default flax init
+            kernel_scale = 1.0
+            embedding_scale = 1.0  # this is actually a smaller value for fan_in
+
+        embedding_init = nnx.initializers.normal(embedding_scale)
+
+        self.token_embedding = nnx.Embed(
+            vocab_size,
+            embedding_features,
+            param_dtype=dtype,
+            embedding_init=embedding_init,
+            rngs=rngs,
+        )
+
+        self.position_embedding = PositionalEmbeddings(seq_length, embedding_features, max_position_offset, embedding_scale, dtype)
+        self.output_embedding = nnx.Param(embedding_init(rngs.params(), (output_tokens, embedding_features), dtype))
+
+        if dropout_rate > 0.0:
+            self.embedding_dropout = nnx.Dropout(dropout_rate)
+
+        kernel_init = nnx.initializers.variance_scaling(kernel_scale, "fan_avg", "truncated_normal")
+        mlp_activation = nnx.relu
+
+        self.transformer_layers = []
+        for _ in range(transformer_layers):
+            self.transformer_layers.append(TransformerLayer(
+                num_heads=transformer_heads,
+                features=embedding_features,
+                hidden_features=mlp_features,
+                kernel_init=kernel_init,
+                mlp_activation=mlp_activation,
+                dtype=dtype,
+                dropout_rate=dropout_rate,
+                use_layer_norm=layer_norm,
+                rngs=rngs))
+
+        self.output_layer = nnx.LinearGeneral((output_tokens, embedding_features), output_classes, axis=(-2, -1), kernel_init=kernel_init, param_dtype=dtype, rngs=rngs)
+
+    def __call__(self, inputs, mask, deterministic: bool, rngs: nnx.Rngs):
+        batch_size = inputs.shape[0] if len(inputs.shape) > 1 else 0
+
+        x = self.token_embedding(inputs)
+        x += self.position_embedding(batch_size, deterministic, rngs)
+
+        output_embedding = self.output_embedding.value
+        if batch_size > 0:
+            output_embedding = jnp.tile(output_embedding, (batch_size, 1, 1))
+
+        x = jnp.concatenate([output_embedding, x], axis=-2)
+
+        if self.dropout_rate > 0.0:
+            x = self.embedding_dropout(x, deterministic=deterministic, rngs=rngs)
+
+        for transformer in self.transformer_layers:
+            x = transformer(x, mask, deterministic, rngs)
+
+        output_token = x[..., 0:self.output_tokens, :]
+        out = self.output_layer(output_token)
+
+        return out
 
 
-        embeddings = token_embeddings + position_embeddings
+def main():
+    rngs = nnx.Rngs(0)
+    network = Network(True, 10, 12, 4, 2, (0,), 6, 5, 0.1, False, True, dtype=jnp.float16, rngs=rngs)
+    print(network)
 
-        # if mask is not None:
-        #     embeddings = jax.vmap(lambda a, b, c: jnp.where(a[..., jnp.newaxis], b, c), in_axes=(0, 0, None))(mask, embeddings, empty_embeddings)
+    output = network(jnp.zeros((4, 12), dtype=jnp.int16), jnp.zeros((12,), dtype=jnp.bool), rngs)
+    print(output)
 
-        embeddings *= (self.embedding_features ** -(1 / 2)) * get_init_scale(self.transformer.num_layers)
 
-        return self.transformer(embeddings, mask)
-
-    def __hash__(self):
-        return id(self)
+if __name__ == '__main__':
+    main()

@@ -1,94 +1,60 @@
-from jax import numpy as jnp
-import flax.linen as nn
-from sentiment_analysis.attention import MultiHeadDotProductAttention
+from jax import numpy as jnp, Array
+from jax.typing import DTypeLike
+from flax import nnx
+from typing import Sequence, Callable
 
 
-class TransformerLayer(nn.Module):
-    training = False
-    kernel_init: nn.initializers.Initializer
-    attention_init: nn.initializers.Initializer
+class TransformerLayer(nnx.Module):
+    def __init__(self, num_heads: int, features: int, hidden_features: Sequence[int], kernel_init, mlp_activation: Callable[[Array], Array], dtype: DTypeLike, dropout_rate: float, use_layer_norm: bool, rngs: nnx.Rngs):
+        self.use_layer_norm = use_layer_norm
+        self.dropout_rate = dropout_rate
 
-    num_heads: int
-    token_features: int
-    dropout_rate: float
+        if use_layer_norm:
+            self.pre_attention_layer_norm = nnx.LayerNorm(features, param_dtype=dtype, rngs=rngs)
+            self.pre_mlp_layer_norm = nnx.LayerNorm(features, param_dtype=dtype, rngs=rngs)
 
-    mlp_activation:
+        if dropout_rate > 0.0:
+            self.post_attention_dropout = nnx.Dropout(dropout_rate)
+            self.post_mlp_dropout = nnx.Dropout(dropout_rate)
 
-    @nn.compact
-    def __call__(self, inputs, mask=None):
+        self.attention = nnx.MultiHeadAttention(
+            num_heads, features, decode=False, dropout_rate=dropout_rate, kernel_init=kernel_init, param_dtype=dtype, rngs=rngs)
+
+        self.mlp_activation = mlp_activation
+        self.mlp_layers = []
+
+        in_features = features
+        for hidden_feature in hidden_features:
+            self.mlp_layers.append(nnx.Linear(in_features, hidden_feature, kernel_init=kernel_init, param_dtype=dtype, rngs=rngs))
+            in_features = hidden_feature
+
+        self.mlp_layers.append(nnx.Linear(in_features, features, kernel_init=kernel_init, param_dtype=dtype, rngs=rngs))
+
+    def __call__(self, inputs, mask, deterministic: bool, rngs: nnx.Rngs):
         x = inputs
         res = x
 
-        #x = nn.LayerNorm()(x)
-        x = MultiHeadDotProductAttention(
-            num_heads=self.num_heads,
-            qkv_features=self.token_features,
-            kernel_init=self.kernel_init,
-            attention_init=self.attention_init,
-            dropout_rate=self.dropout_rate,
-            deterministic=not self.training,
-        )(x, mask=mask)
-        x = nn.Dropout(rate=0.1, deterministic=True)(x)
+        if self.use_layer_norm:
+            x = self.pre_attention_layer_norm(x)
+        x = self.attention(x, deterministic=deterministic, rngs=rngs)
+        if self.dropout_rate > 0.0:
+            x = self.post_attention_dropout(x, deterministic=deterministic, rngs=rngs)
 
         x += res
         res = x
 
-        #x = nn.LayerNorm()(x)
-        x = nn.Dense(
-            features=self.token_features * 4,
-            kernel_init=self.kernel_init,
-        )(x)
-        if self.dropout_rate > 0:
-            x = nn.Dropout(rate=self.dropout_rate, deterministic=not self.training)(x)
+        if self.use_layer_norm:
+            x = self.pre_mlp_layer_norm(x)
 
-        x = nn.relu(x)
-        x = nn.Dense(
-            features=self.token_features,
-            kernel_init=self.kernel_init,
-        )(x)
-        if self.dropout_rate > 0:
-            x = nn.Dropout(rate=self.dropout_rate, deterministic=not self.training)(x)
+        for i, hidden_layer in enumerate(self.mlp_layers):
+            x = hidden_layer(x)
+            if i < len(self.mlp_layers) - 1:
+                x = self.mlp_activation(x)
+
+        if self.dropout_rate > 0.0:
+            x = self.post_mlp_dropout(x, deterministic=deterministic, rngs=rngs)
 
         x += res
 
         return x
 
-
-def get_init_scale(n):
-    return (9 * n) ** -(1 / 4)
-
-
-class Transformer(nn.Module):
-    num_heads: int = 8
-    token_features: int = 16
-    vocab_size: int = 10
-    num_layers: int = 6
-
-    @nn.compact
-    def __call__(self, inputs, mask=None):
-        kernel_init = nn.initializers.variance_scaling(
-            scale=get_init_scale(self.num_layers),
-            mode="fan_avg",
-            distribution="truncated_normal",
-        )
-        if mask is not None:
-            mask = nn.make_attention_mask(mask, mask, jnp.logical_and)
-
-        x = inputs
-        for i in range(self.num_layers):
-            x = TransformerLayer(
-                num_heads=self.num_heads,
-                token_features=self.token_features,
-                kernel_init=kernel_init,
-            )(x, mask)
-
-        # x = nn.LayerNorm()(x)
-        x = nn.DenseGeneral(
-            features=5,
-            axis=(-2, -1),
-            kernel_init=kernel_init,
-        )(x)
-
-        # jax.debug.breakpoint()
-
-        return x
