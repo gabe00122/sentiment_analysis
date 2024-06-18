@@ -1,0 +1,5 @@
+{
+  "test_ratio": 0.2,
+  "validation_ratio": 0.05,
+  "seed": 1234
+}

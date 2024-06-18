@@ -1,0 +1,14 @@
+{
+  "epochs": 10,
+  "training_data": "file_path",
+  "optimizer": {
+    "type": "adam",
+    "learning_rate": {
+      "type": "",
+      "peak_value": ""
+    }
+  },
+  "model": {
+
+  }
+}
