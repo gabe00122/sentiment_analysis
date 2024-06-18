@@ -25,7 +25,6 @@ def main():
     num_heads = 8
     num_layers = 6
 
-
     data_size = total_steps * sequence_length
 
     training_data = jnp.load("./data/training_data.npz")
@@ -55,28 +54,31 @@ def main():
 
     abstract_tree = get_abstract_tree(network, sequence_length)
     params = load_model(Path("./metrics_friday/1"), abstract_tree)
-    #param_count = sum(x.size for x in jax.tree_leaves(params))
+    # param_count = sum(x.size for x in jax.tree_leaves(params))
 
-    #print(param_count)
+    # print(param_count)
 
-    #unique, counts = jnp.unique(labels, return_counts=True)
-    #print(unique)
-    #print(counts)
+    # unique, counts = jnp.unique(labels, return_counts=True)
+    # print(unique)
+    # print(counts)
 
     def score(labels, tokens):
         mask = tokens != -1
         logits = network.apply(params, tokens, mask)
         predictions = jnp.argmax(nn.softmax(logits), axis=1)
         return jnp.mean(predictions == labels - 1)
-    
+
     score = jax.jit(score)
-     
+
     batch_size = 1000
     accuracy = np.zeros(870, jnp.float32)
     for i in range(870):
-        accuracy[i] = score(labels[i*batch_size:i*batch_size+batch_size], tokens[i*batch_size:i*batch_size+batch_size])
+        accuracy[i] = score(
+            labels[i * batch_size : i * batch_size + batch_size],
+            tokens[i * batch_size : i * batch_size + batch_size],
+        )
     print(jnp.mean(accuracy))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

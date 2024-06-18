@@ -10,9 +10,7 @@ def main():
     max_length = 128
 
     processor = SentencePieceProcessor(model_file="tokenizer.model")
-    data_path = (
-        "./data/yelp_academic_dataset_review.json"
-    )
+    data_path = "./data/yelp_academic_dataset_review.json"
 
     stars_data = []
     length_data = []

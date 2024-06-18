@@ -5,30 +5,68 @@ from typing import Sequence, Callable
 
 
 class TransformerLayer(nnx.Module):
-    def __init__(self, num_heads: int, features: int, hidden_features: Sequence[int], kernel_init, mlp_activation: Callable[[Array], Array], dtype: DTypeLike, dropout_rate: float, use_layer_norm: bool, rngs: nnx.Rngs):
+    def __init__(
+        self,
+        num_heads: int,
+        features: int,
+        hidden_features: Sequence[int],
+        kernel_init,
+        mlp_activation: Callable[[Array], Array],
+        dtype: DTypeLike,
+        dropout_rate: float,
+        use_layer_norm: bool,
+        rngs: nnx.Rngs,
+    ):
         self.use_layer_norm = use_layer_norm
         self.dropout_rate = dropout_rate
 
         if use_layer_norm:
-            self.pre_attention_layer_norm = nnx.LayerNorm(features, param_dtype=dtype, rngs=rngs)
-            self.pre_mlp_layer_norm = nnx.LayerNorm(features, param_dtype=dtype, rngs=rngs)
+            self.pre_attention_layer_norm = nnx.LayerNorm(
+                features, param_dtype=dtype, rngs=rngs
+            )
+            self.pre_mlp_layer_norm = nnx.LayerNorm(
+                features, param_dtype=dtype, rngs=rngs
+            )
 
         if dropout_rate > 0.0:
             self.post_attention_dropout = nnx.Dropout(dropout_rate)
             self.post_mlp_dropout = nnx.Dropout(dropout_rate)
 
         self.attention = nnx.MultiHeadAttention(
-            num_heads, features, decode=False, dropout_rate=dropout_rate, kernel_init=kernel_init, param_dtype=dtype, rngs=rngs)
+            num_heads,
+            features,
+            decode=False,
+            dropout_rate=dropout_rate,
+            kernel_init=kernel_init,
+            param_dtype=dtype,
+            rngs=rngs,
+        )
 
         self.mlp_activation = mlp_activation
         self.mlp_layers = []
 
         in_features = features
         for hidden_feature in hidden_features:
-            self.mlp_layers.append(nnx.Linear(in_features, hidden_feature, kernel_init=kernel_init, param_dtype=dtype, rngs=rngs))
+            self.mlp_layers.append(
+                nnx.Linear(
+                    in_features,
+                    hidden_feature,
+                    kernel_init=kernel_init,
+                    param_dtype=dtype,
+                    rngs=rngs,
+                )
+            )
             in_features = hidden_feature
 
-        self.mlp_layers.append(nnx.Linear(in_features, features, kernel_init=kernel_init, param_dtype=dtype, rngs=rngs))
+        self.mlp_layers.append(
+            nnx.Linear(
+                in_features,
+                features,
+                kernel_init=kernel_init,
+                param_dtype=dtype,
+                rngs=rngs,
+            )
+        )
 
     def __call__(self, inputs, mask, deterministic: bool, rngs: nnx.Rngs):
         x = inputs
@@ -57,4 +95,3 @@ class TransformerLayer(nnx.Module):
         x += res
 
         return x
-

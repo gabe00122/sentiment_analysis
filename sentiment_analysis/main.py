@@ -68,18 +68,20 @@ def main():
 
     optimizer = optax.adamw(
         learning_rate=optax.warmup_cosine_decay_schedule(
-            0.000005,0.00125/3, 20000, (data_size // batch_size) * epochs
+            0.000005, 0.00125 / 3, 20000, (data_size // batch_size) * epochs
         ),
         # b1=0.9,
         # b2=0.98,
-        weight_decay=0.0001
+        weight_decay=0.0001,
     )
     opt_state = optimizer.init(network_params)
 
     indices = jnp.arange(data_size)
 
     static_state = StaticState(network, optimizer, batch_size)
-    training_state = TrainingState(rng_key, network_params, opt_state, indices, 0, tokens, labels)
+    training_state = TrainingState(
+        rng_key, network_params, opt_state, indices, 0, tokens, labels
+    )
 
     writer = PandasWriter(Path("./metrics_next.parquet"))
 
@@ -87,7 +89,9 @@ def main():
         rng_key, indices_key = random.split(training_state.rng_key)
         indices = random.permutation(indices_key, training_state.indices)
 
-        training_state = training_state._replace(batch_index=0, indices=indices, rng_key=rng_key)
+        training_state = training_state._replace(
+            batch_index=0, indices=indices, rng_key=rng_key
+        )
 
         for i in range((data_size // batch_size) // 500):
             if i == 0:
@@ -115,13 +119,13 @@ class TrainingSample(NamedTuple):
 
 
 def loss(network: Network, params, training_batch: TrainingSample, rng_key):
-    #vec_network = jax.vmap(network.apply, in_axes=(None, 0, 0))
+    # vec_network = jax.vmap(network.apply, in_axes=(None, 0, 0))
 
-    logits = network.apply(params, training_batch.tokens, training_batch.mask, rngs=rng_key)
-    hot_labels = nn.one_hot(training_batch.labels - 1, 5)
-    mean_cross_entropy = jnp.mean(
-        softmax_cross_entropy(logits, hot_labels)
+    logits = network.apply(
+        params, training_batch.tokens, training_batch.mask, rngs=rng_key
     )
+    hot_labels = nn.one_hot(training_batch.labels - 1, 5)
+    mean_cross_entropy = jnp.mean(softmax_cross_entropy(logits, hot_labels))
 
     logits_indices = jnp.argmax(logits, axis=1)
     percent_correct = jnp.mean(
@@ -157,7 +161,9 @@ def training_step(
 
     start_slice = state.batch_index * static_state.batch_size
 
-    indices = jax.lax.dynamic_slice(state.indices, (start_slice,), (static_state.batch_size,))
+    indices = jax.lax.dynamic_slice(
+        state.indices, (start_slice,), (static_state.batch_size,)
+    )
     # jax.debug.breakpoint()
 
     tokens = state.tokens[indices]

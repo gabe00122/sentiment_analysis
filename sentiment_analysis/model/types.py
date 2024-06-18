@@ -9,6 +9,7 @@ class StaticState(NamedTuple):
     solver: Any
     batch_size: int
 
+
 class TrainingState(NamedTuple):
     rng_key: Array
     params: Any
