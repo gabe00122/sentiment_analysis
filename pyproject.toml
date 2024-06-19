@@ -19,6 +19,7 @@ tensorflow = "^2.16.1"
 jupyter = "^1.0.0"
 penzai = {extras = ["notebook"], version = "^0.1.2"}
 pydantic = "^2.7.4"
+tokenmonster = "^1.1.12"
 
 
 [build-system]

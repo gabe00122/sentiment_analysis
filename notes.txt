@@ -1,0 +1,5 @@
+
+token monster
+./getalltokens -dataset "/home/gabe00122/projects/sentiment_analysis/data/corpus.txt" -norm "collapse trim quotemarks unixlines" -mode consistent -output yelp_tokens
+
+./trainvocab -dataset "/home/gabe00122/projects/sentiment_analysis/data/corpus.txt" -dictionary yelp_tokens -dir vocab -vocab-size 16000

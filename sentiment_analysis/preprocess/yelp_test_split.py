@@ -46,7 +46,6 @@ def train_test_split(data_path: Path, config: TestSplitConfig):
                 print_stats()
 
     print("done!")
-    # print_stats()
 
 
 def main():
