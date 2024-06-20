@@ -1,8 +1,10 @@
 from typing import Sequence
 
+import jax.debug
 from flax import nnx
 from jax import numpy as jnp
 from jax.typing import DTypeLike
+import math
 
 from sentiment_analysis.model.embeddings import PositionalEmbeddings
 from sentiment_analysis.model.transformer import TransformerLayer
@@ -43,7 +45,7 @@ class Network(nnx.Module):
         else:
             # default flax init
             kernel_scale = 1.0
-            embedding_scale = 1.0  # this is actually a smaller value for fan_in
+        embedding_scale = 1.0 / embedding_features  # this is actually a smaller value for fan_in
 
         embedding_init = nnx.initializers.normal(embedding_scale)
 
@@ -65,13 +67,14 @@ class Network(nnx.Module):
         if dropout_rate > 0.0:
             self.embedding_dropout = nnx.Dropout(dropout_rate)
 
-        kernel_init = nnx.initializers.variance_scaling(
-            kernel_scale, "fan_avg", "truncated_normal"
-        )
         mlp_activation = nnx.relu
 
         self.transformer_layers = []
-        for _ in range(transformer_layers):
+        for i in range(transformer_layers):
+            kernel_init = nnx.initializers.variance_scaling(
+                kernel_scale, "fan_avg", "truncated_normal"
+            )
+
             self.transformer_layers.append(
                 TransformerLayer(
                     num_heads=transformer_heads,
@@ -86,16 +89,31 @@ class Network(nnx.Module):
                 )
             )
 
+        if layer_norm:
+            self.output_layer_norm = nnx.LayerNorm(embedding_features, rngs=rngs)
+
         self.output_layer = nnx.LinearGeneral(
             (output_tokens, embedding_features),
-            output_classes,
+            output_tokens * embedding_features,
             axis=(-2, -1),
-            kernel_init=kernel_init,
+            kernel_init=nnx.initializers.variance_scaling(
+                kernel_scale, "fan_avg", "truncated_normal"
+            ),
             param_dtype=dtype,
             rngs=rngs,
         )
 
-    def __call__(self, inputs, mask, deterministic: bool, rngs: nnx.Rngs):
+        self.final_layer = nnx.Linear(
+            output_tokens * embedding_features,
+            output_classes,
+            kernel_init=nnx.initializers.variance_scaling(
+                kernel_scale, "fan_avg", "truncated_normal"
+            ),
+            param_dtype=dtype,
+            rngs=rngs,
+        )
+
+    def __call__(self, inputs, deterministic: bool, rngs: nnx.Rngs):
         batch_size = inputs.shape[0] if len(inputs.shape) > 1 else 0
 
         x = self.token_embedding(inputs)
@@ -110,27 +128,31 @@ class Network(nnx.Module):
         if self.dropout_rate > 0.0:
             x = self.embedding_dropout(x, deterministic=deterministic, rngs=rngs)
 
+        mask = make_mask(inputs, self.output_tokens, batch_size)
         for transformer in self.transformer_layers:
             x = transformer(x, mask, deterministic, rngs)
 
-        output_token = x[..., 0 : self.output_tokens, :]
-        out = self.output_layer(output_token)
+        output_tokens = x[..., 0 : self.output_tokens, :]
+
+        if self.output_layer_norm:
+            output_tokens = self.output_layer_norm(output_tokens)
+
+        out = self.output_layer(output_tokens)
+        out = nnx.relu(out)
+        out = self.final_layer(out)
+
+        # jax.debug.breakpoint()
 
         return out
 
 
-def main():
-    rngs = nnx.Rngs(0)
-    network = Network(
-        True, 10, 12, 4, 2, (0,), 6, 5, 0.1, False, True, dtype=jnp.float16, rngs=rngs
-    )
-    print(network)
+def make_mask(inputs, output_tokens, batch_size):
+    mask = inputs != -1
+    if batch_size > 0:
+        output_mask = jnp.ones((batch_size, output_tokens), dtype=jnp.bool)
+    else:
+        output_mask = jnp.ones(output_tokens, dtype=jnp.bool)
 
-    output = network(
-        jnp.zeros((4, 12), dtype=jnp.int16), jnp.zeros((12,), dtype=jnp.bool), rngs
-    )
-    print(output)
-
-
-if __name__ == "__main__":
-    main()
+    mask = jnp.concatenate([output_mask, mask], axis=-1)
+    mask = nnx.make_attention_mask(mask, mask, jnp.logical_and)
+    return mask

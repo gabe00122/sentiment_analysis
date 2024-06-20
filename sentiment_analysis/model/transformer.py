@@ -75,7 +75,7 @@ class TransformerLayer(nnx.Module):
 
         if self.use_layer_norm:
             x = self.pre_attention_layer_norm(x)
-        x = self.attention(x, deterministic=deterministic, rngs=rngs)
+        x = self.attention(x, mask=mask, deterministic=deterministic, rngs=rngs) # please remove the sow!
         if self.dropout_rate > 0.0:
             x = self.post_attention_dropout(x, deterministic=deterministic, rngs=rngs)
 

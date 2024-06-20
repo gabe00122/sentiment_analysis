@@ -1,12 +1,10 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, NamedTuple
 from pathlib import Path
-from functools import singledispatchmethod
-import pandas as pd
+import os
+from typing import Any, NamedTuple
 from jax import Array, numpy as jnp
 from jax.typing import ArrayLike
-
+from tensorboardX import SummaryWriter
 
 type Metrics = dict[str, Array]
 
@@ -24,24 +22,32 @@ class Writer(ABC):
     def flush(self) -> None: ...
 
 
-class PandasWriter(Writer):
+class TensorboardWriter(Writer):
     data: dict[str, Any] = {}
 
     def __init__(self, output_path: Path) -> None:
         self.output_path = output_path
+        self.writer = SummaryWriter(os.path.abspath(output_path))
+        self.global_step = 0
+        #self.run_name = "test"
 
     def write(self, metrics: Metrics | MetricsBuffer) -> None:
         if isinstance(metrics, MetricsBuffer):
             for key, value in metrics.values.items():
-                value_slice = value[: metrics.length].tolist()
-                self.data.setdefault(key, []).extend(value_slice)
+                value_list = value[: metrics.length].tolist()
+
+                for i, value_item in enumerate(value_list):
+                    self.writer.add_scalar(key, value_item, self.global_step + i)
+
+            self.global_step += metrics.length
         else:
             for key, value in metrics.items():
-                self.data.setdefault(key, []).append(value.item())
+                self.writer.add_scalar(key, value.item(), self.global_step)
+
+            self.global_step += 1
 
     def flush(self) -> None:
-        df = pd.DataFrame(self.data)
-        df.to_parquet(self.output_path)
+        self.writer.close()
 
 
 def create_metrics_buffer(metrics: Metrics, capacity: ArrayLike) -> MetricsBuffer:

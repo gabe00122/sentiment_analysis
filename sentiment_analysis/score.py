@@ -1,84 +1,163 @@
+from functools import partial
 from pathlib import Path
+from typing import NamedTuple
 
 import jax
-from flax import linen as nn
+import optax
+from flax import nnx
 from jax import numpy as jnp, random
-import numpy as np
 
-from sentiment_analysis.eval import get_abstract_tree, load_model
-from sentiment_analysis.network import Network
-from sentiment_analysis.positional_embeddings import get_positional_embeddings
-from sentiment_analysis.transformer import Transformer
+from sentiment_analysis.common.checkpointer import Checkpointer
+from sentiment_analysis.common.metrics import TensorboardWriter, create_metrics_buffer, append_buffer, MetricsBuffer
+from sentiment_analysis.model.network import Network
 
 
-def main():
-    total_steps = 25_000
-    epochs = 10
+def train():
+    # jax.config.update("jax_debug_nans", True)
 
-    rng_key = random.PRNGKey(42)
-    vocab_size = 2000
-    embedding_features = 128
+    seed = 123
+    batch_size = 512
+    batch_per_call = 250
+    epochs = 1
 
-    batch_size = 128
+    data = jnp.load("./data/test.npz")
+    tokens = data['tokens']
+    labels = data['labels']
 
-    sequence_length = 128
-    num_heads = 8
-    num_layers = 6
+    sample_count = tokens.shape[0]
+    print(f"Total Samples: {sample_count}")
 
-    data_size = total_steps * sequence_length
+    samples_per_call = batch_size * batch_per_call
+    gpu_calls_per_epoch = (sample_count // samples_per_call)
 
-    training_data = jnp.load("./data/training_data.npz")
-    print(training_data)
-    print(training_data["tokens"].shape)
+    sample_count = gpu_calls_per_epoch * samples_per_call
+    print(f"Rounding To: {sample_count}")
 
-    test_set_size = 10000
-    labels = training_data["stars"][data_size:]  # should be stars or labels
-    tokens = training_data["tokens"][data_size:]
+    tokens = tokens[:sample_count]
+    labels = labels[:sample_count] - 1
 
-    print(tokens.shape)
-
-    transformer = Transformer(
-        num_heads=num_heads,
-        token_features=embedding_features,
-        num_layers=num_layers,
+    width = 256
+    rngs = nnx.Rngs(seed)
+    model = Network(
+        vocab_size=16000,
+        seq_length=115,
+        output_tokens=13,
+        embedding_features=width,
+        transformer_layers=6,
+        transformer_heads=8,
+        mlp_features=(width*4,),
+        max_position_offset=115,
+        output_classes=5,
+        dropout_rate=0.1,
+        layer_norm=True,
+        fixup_constant=0,
+        dtype=jnp.float32,
+        rngs=nnx.Rngs(0),
     )
 
-    network = Network(
-        transformer=transformer,
-        vocab_size=vocab_size,
-        embedding_features=embedding_features,
-        position_embeddings=get_positional_embeddings(
-            sequence_length * 2, embedding_features
-        ),
+    checkpoints = Checkpointer("checkpoints2")
+    model = checkpoints.restore_latest(model)
+
+    indices = jnp.arange(sample_count, dtype=jnp.int32)
+
+    model_graph, model_state = nnx.split(model)
+
+    rngs_graph, rngs = nnx.split(rngs)
+
+    static = StaticState(
+        model=model_graph,
+        rngs=rngs_graph,
+        batch_size=batch_size,
     )
 
-    abstract_tree = get_abstract_tree(network, sequence_length)
-    params = load_model(Path("./metrics_friday/1"), abstract_tree)
-    # param_count = sum(x.size for x in jax.tree_leaves(params))
+    dynamic = DynamicState(
+        step=0,
+        model=model_state,
+        rngs=rngs,
+        indices=indices,
+        tokens=tokens,
+        labels=labels
+    )
 
-    # print(param_count)
+    output = jnp.zeros(gpu_calls_per_epoch, jnp.float32)
+    for call in range(gpu_calls_per_epoch):
+        dynamic, metrics = multi_training_step(static, dynamic, batch_per_call)
 
-    # unique, counts = jnp.unique(labels, return_counts=True)
-    # print(unique)
-    # print(counts)
+        percent_correct = metrics.values["percent_correct"].mean().item() * 100
+        output = output.at[call].set(percent_correct)
 
-    def score(labels, tokens):
-        mask = tokens != -1
-        logits = network.apply(params, tokens, mask)
-        predictions = jnp.argmax(nn.softmax(logits), axis=1)
-        return jnp.mean(predictions == labels - 1)
+        print(f"step = {call}/{gpu_calls_per_epoch}, correct = {percent_correct:.0f}%")
 
-    score = jax.jit(score)
+    print(f"output = {output.mean().item():.2f}%")
 
-    batch_size = 1000
-    accuracy = np.zeros(870, jnp.float32)
-    for i in range(870):
-        accuracy[i] = score(
-            labels[i * batch_size : i * batch_size + batch_size],
-            tokens[i * batch_size : i * batch_size + batch_size],
-        )
-    print(jnp.mean(accuracy))
+    checkpoints.close()
+
+def train_step(model: nnx.Module, indices, tokens, labels, batch_size: int, step: int, rngs: nnx.Rngs):
+    indices = jax.lax.dynamic_slice(
+        indices, (batch_size * step,), (batch_size,)
+    )
+    tokens = tokens[indices]
+    labels = labels[indices]
+
+    logit_pred = model(tokens, deterministic=False, rngs=rngs)
+
+    logits_indices = jnp.argmax(logit_pred, axis=1)
+    percent_correct = jnp.mean(
+        logits_indices == labels, dtype=jnp.float32
+    )
+    metrics = {"percent_correct": percent_correct}
 
 
-if __name__ == "__main__":
-    main()
+    return metrics
+
+
+class StaticState(NamedTuple):
+    model: nnx.GraphDef
+    rngs: nnx.GraphDef
+    batch_size: int
+
+class DynamicState(NamedTuple):
+    step: jax.typing.ArrayLike
+    model: nnx.State
+    rngs: nnx.State
+    indices: jax.Array
+    tokens: jax.Array
+    labels: jax.Array
+
+
+def training_step_wrapper(static: StaticState, dynamic: DynamicState) -> tuple[DynamicState, dict[str, jax.Array]]:
+    model = nnx.merge(static.model, dynamic.model)
+    rngs = nnx.merge(static.rngs, dynamic.rngs)
+
+    metrics = train_step(model, dynamic.indices, dynamic.tokens, dynamic.labels, static.batch_size, dynamic.step, rngs)
+
+    dynamic = dynamic._replace(
+        model=nnx.state(model),
+        rngs=nnx.state(rngs),
+        step=dynamic.step + 1
+    )
+
+    return dynamic, metrics
+
+
+@partial(jax.jit, static_argnums=(0, 2), donate_argnums=1)
+def multi_training_step(static: StaticState, dynamic: DynamicState, batches_per_call: int) -> tuple[DynamicState, MetricsBuffer]:
+    dynamic, metrics = training_step_wrapper(static, dynamic)
+    metrics_buffer = create_metrics_buffer(metrics, batches_per_call)
+
+    if batches_per_call <= 1:
+        return dynamic, metrics_buffer
+
+    def loop_body(i, curry) -> tuple[DynamicState, MetricsBuffer]:
+        dynamic, metrics_buffer = curry
+
+        dynamic, metrics = training_step_wrapper(static, dynamic)
+        metrics_buffer = append_buffer(metrics_buffer, metrics)
+
+        return dynamic, metrics_buffer
+
+    return jax.lax.fori_loop(1, batches_per_call, loop_body, (dynamic, metrics_buffer))
+
+
+if __name__ == '__main__':
+    train()
