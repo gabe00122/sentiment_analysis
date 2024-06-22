@@ -16,9 +16,9 @@ def train():
     # jax.config.update("jax_debug_nans", True)
 
     seed = 123
-    batch_size = 128
+    batch_size = 256 // 4
     batch_per_call = 250
-    epochs = 10
+    epochs = 20
 
     data = jnp.load("./data/training.npz")
     tokens = data['tokens']
@@ -38,7 +38,7 @@ def train():
 
     total_steps = (sample_count // batch_size) * epochs
 
-    width = 256
+    width = 512
     rngs = nnx.Rngs(seed)
     model = Network(
         vocab_size=16000,
@@ -47,25 +47,26 @@ def train():
         embedding_features=width,
         transformer_layers=12,
         transformer_heads=8,
-        mlp_features=(width*4,),
-        max_position_offset=115,
+        mlp_features=(2048,),
+        max_position_offset=10,
         output_classes=5,
-        dropout_rate=0.0,
+        dropout_rate=0.1,
         layer_norm=True,
-        fixup_constant=9,
+        fixup_constant=0,
         dtype=jnp.float32,
         rngs=nnx.Rngs(0),
     )
     optimizer = nnx.Optimizer(model, optax.chain(
-        optax.clip(0.5),
-        optax.adam(
-        learning_rate=optax.warmup_cosine_decay_schedule(
-            0.00002/100, 0.00002, 2000, total_steps
-        ),
-        #weight_decay=0.0001,
+        # optax.clip(0.5),
+        optax.adamw(
+            learning_rate=optax.warmup_cosine_decay_schedule(
+                0.0, 0.0001, 6000, total_steps
+            ),
+            weight_decay=0.0001,
     )))
+    count_params(model)
 
-    checkpoints = Checkpointer("checkpoints3")
+    checkpoints = Checkpointer("checkpoints5")
     indices = jnp.arange(sample_count, dtype=jnp.int32)
 
     optimizer_graph, optimizer = nnx.split(optimizer)
@@ -88,7 +89,7 @@ def train():
         labels=labels
     )
 
-    writer = TensorboardWriter(Path("./tensorboard3"))
+    writer = TensorboardWriter(Path("./tensorboard5"))
     indices_rng = random.PRNGKey(42)
 
     for epoch in range(epochs):
@@ -188,6 +189,12 @@ def multi_training_step(static: StaticState, dynamic: DynamicState, batches_per_
         return dynamic, metrics_buffer
 
     return jax.lax.fori_loop(1, batches_per_call, loop_body, (dynamic, metrics_buffer))
+
+def count_params(model):
+    params = nnx.state(model, nnx.Param)
+    param_count = sum(x.size for x in jax.tree_util.tree_leaves(params))
+    print(f"Param Count: {param_count}")
+
 
 
 if __name__ == '__main__':

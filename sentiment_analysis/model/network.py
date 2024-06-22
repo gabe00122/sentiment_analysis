@@ -45,9 +45,9 @@ class Network(nnx.Module):
         else:
             # default flax init
             kernel_scale = 1.0
-        embedding_scale = 1.0 / embedding_features  # this is actually a smaller value for fan_in
+        embedding_scale = math.sqrt(1.0 / embedding_features)  # this is actually a smaller value for fan_in
 
-        embedding_init = nnx.initializers.normal(embedding_scale)
+        embedding_init = nnx.initializers.normal(embedding_scale, dtype=dtype)
 
         self.token_embedding = nnx.Embed(
             vocab_size,
@@ -66,13 +66,14 @@ class Network(nnx.Module):
 
         if dropout_rate > 0.0:
             self.embedding_dropout = nnx.Dropout(dropout_rate)
+            self.output_layer_dropout = nnx.Dropout(self.dropout_rate)
 
         mlp_activation = nnx.relu
 
         self.transformer_layers = []
         for i in range(transformer_layers):
             kernel_init = nnx.initializers.variance_scaling(
-                kernel_scale, "fan_avg", "truncated_normal"
+                kernel_scale, "fan_avg", "truncated_normal", dtype=dtype
             )
 
             self.transformer_layers.append(
@@ -90,7 +91,7 @@ class Network(nnx.Module):
             )
 
         if layer_norm:
-            self.output_layer_norm = nnx.LayerNorm(embedding_features, rngs=rngs)
+            self.output_layer_norm = nnx.LayerNorm(embedding_features, rngs=rngs, dtype=dtype)
 
         self.output_layer = nnx.LinearGeneral(
             (output_tokens, embedding_features),
@@ -138,6 +139,8 @@ class Network(nnx.Module):
             output_tokens = self.output_layer_norm(output_tokens)
 
         out = self.output_layer(output_tokens)
+        if self.dropout_rate > 0.0:
+            out = self.output_layer_dropout(out, deterministic=deterministic, rngs=rngs)
         out = nnx.relu(out)
         out = self.final_layer(out)
 

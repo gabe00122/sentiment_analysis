@@ -18,7 +18,6 @@ def train():
     seed = 123
     batch_size = 512
     batch_per_call = 250
-    epochs = 1
 
     data = jnp.load("./data/test.npz")
     tokens = data['tokens']
@@ -36,26 +35,26 @@ def train():
     tokens = tokens[:sample_count]
     labels = labels[:sample_count] - 1
 
-    width = 256
+    width = 512
     rngs = nnx.Rngs(seed)
     model = Network(
         vocab_size=16000,
         seq_length=115,
-        output_tokens=13,
+        output_tokens=8,
         embedding_features=width,
         transformer_layers=6,
         transformer_heads=8,
-        mlp_features=(width*4,),
-        max_position_offset=115,
+        mlp_features=(2048,),
+        max_position_offset=10,
         output_classes=5,
         dropout_rate=0.1,
         layer_norm=True,
-        fixup_constant=0,
+        fixup_constant=4,
         dtype=jnp.float32,
         rngs=nnx.Rngs(0),
     )
 
-    checkpoints = Checkpointer("checkpoints2")
+    checkpoints = Checkpointer("checkpoints4")
     model = checkpoints.restore_latest(model)
 
     indices = jnp.arange(sample_count, dtype=jnp.int32)
