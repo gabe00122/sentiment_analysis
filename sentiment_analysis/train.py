@@ -13,10 +13,8 @@ from sentiment_analysis.model.network import Network
 
 
 def train():
-    # jax.config.update("jax_debug_nans", True)
-
     seed = 123
-    batch_size = 256 // 4
+    batch_size = 64
     batch_per_call = 250
     epochs = 20
 
@@ -49,21 +47,19 @@ def train():
         transformer_heads=8,
         mlp_features=(2048,),
         max_position_offset=10,
+        activation=nnx.relu,
         output_classes=5,
         dropout_rate=0.1,
         layer_norm=True,
-        fixup_constant=0,
         dtype=jnp.float32,
         rngs=nnx.Rngs(0),
     )
-    optimizer = nnx.Optimizer(model, optax.chain(
-        # optax.clip(0.5),
-        optax.adamw(
-            learning_rate=optax.warmup_cosine_decay_schedule(
-                0.0, 0.0001, 6000, total_steps
-            ),
-            weight_decay=0.0001,
-    )))
+    optimizer = nnx.Optimizer(model, optax.adamw(
+        learning_rate=optax.warmup_cosine_decay_schedule(
+            0.0, 0.0001, 6000, total_steps
+        ),
+        weight_decay=0.0001,
+    ))
     count_params(model)
 
     checkpoints = Checkpointer("checkpoints5")
@@ -73,7 +69,6 @@ def train():
     rngs_graph, rngs = nnx.split(rngs)
 
     static = StaticState(
-        # model=model_graph,
         optimizer=optimizer_graph,
         rngs=rngs_graph,
         batch_size=batch_size,
@@ -81,7 +76,6 @@ def train():
 
     dynamic = DynamicState(
         step=0,
-        # model=model,
         optimizer=optimizer,
         rngs=rngs,
         indices=indices,
@@ -89,7 +83,7 @@ def train():
         labels=labels
     )
 
-    writer = TensorboardWriter(Path("./tensorboard5"))
+    writer = TensorboardWriter(Path("./tensorboard"))
     indices_rng = random.PRNGKey(42)
 
     for epoch in range(epochs):
@@ -100,7 +94,6 @@ def train():
         )
 
         for call in range(gpu_calls_per_epoch):
-            #dynamic = dynamic._replace(step=step)
             dynamic, metrics = multi_training_step(static, dynamic, batch_per_call)
             writer.write(metrics)
 
@@ -109,11 +102,11 @@ def train():
 
             print(f"epoch = {epoch}/{epochs}, step = {call}/{gpu_calls_per_epoch}, loss = {loss}, correct = {percent_correct:.0f}%")
 
-
         checkpoints.save(epoch, nnx.merge(optimizer_graph, dynamic.optimizer).model)
 
-    writer.flush() # todo rename this to close
+    writer.flush()
     checkpoints.close()
+
 
 def train_step(model: nnx.Module, optimizer: nnx.Optimizer, indices, tokens, labels, batch_size: int, step: int, rngs: nnx.Rngs):
     indices = jax.lax.dynamic_slice(
@@ -136,20 +129,17 @@ def train_step(model: nnx.Module, optimizer: nnx.Optimizer, indices, tokens, lab
 
     grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(model)
     optimizer.update(grads)
-    #jax.debug.breakpoint()
 
     return metrics
 
 
 class StaticState(NamedTuple):
-    # model: nnx.GraphDef
     optimizer: nnx.GraphDef
     rngs: nnx.GraphDef
     batch_size: int
 
 class DynamicState(NamedTuple):
     step: jax.typing.ArrayLike
-    # model: nnx.State
     optimizer: nnx.State
     rngs: nnx.State
     indices: jax.Array
@@ -157,7 +147,6 @@ class DynamicState(NamedTuple):
     labels: jax.Array
 
 
-#@partial(jax.jit, static_argnums=0)
 def training_step_wrapper(static: StaticState, dynamic: DynamicState) -> tuple[DynamicState, dict[str, jax.Array]]:
     optimizer = nnx.merge(static.optimizer, dynamic.optimizer)
     rngs = nnx.merge(static.rngs, dynamic.rngs)
@@ -171,6 +160,7 @@ def training_step_wrapper(static: StaticState, dynamic: DynamicState) -> tuple[D
     )
 
     return dynamic, metrics
+
 
 @partial(jax.jit, static_argnums=(0, 2), donate_argnums=1)
 def multi_training_step(static: StaticState, dynamic: DynamicState, batches_per_call: int) -> tuple[DynamicState, MetricsBuffer]:
@@ -190,11 +180,11 @@ def multi_training_step(static: StaticState, dynamic: DynamicState, batches_per_
 
     return jax.lax.fori_loop(1, batches_per_call, loop_body, (dynamic, metrics_buffer))
 
+
 def count_params(model):
     params = nnx.state(model, nnx.Param)
     param_count = sum(x.size for x in jax.tree_util.tree_leaves(params))
     print(f"Param Count: {param_count}")
-
 
 
 if __name__ == '__main__':

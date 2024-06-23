@@ -1,21 +1,12 @@
-from typing import Sequence
-
-import jax.debug
-from flax import nnx
-from jax import numpy as jnp
-from jax.typing import DTypeLike
 import math
+from typing import Sequence, Callable
+
+from flax import nnx
+from jax import numpy as jnp, Array
+from jax.typing import DTypeLike
 
 from sentiment_analysis.model.embeddings import PositionalEmbeddings
 from sentiment_analysis.model.transformer import TransformerLayer
-
-
-def get_fixup_scale(transformer_layers: int, fixup_constant: float = 0.67) -> float:
-    return (fixup_constant * transformer_layers) ** -(1 / 4)
-
-
-def get_embed_scale(embedding_features: int) -> float:
-    return embedding_features ** -(1 / 2)
 
 
 class Network(nnx.Module):
@@ -28,25 +19,21 @@ class Network(nnx.Module):
         transformer_layers: int,
         transformer_heads: int,
         mlp_features: Sequence[int],
+        activation: Callable[[Array], Array],
         max_position_offset: int,
         output_classes: int,
         dropout_rate: float,
         layer_norm: bool,
-        fixup_constant: float,
         dtype: DTypeLike,
         rngs: nnx.Rngs,
     ):
         self.dropout_rate = dropout_rate
         self.output_tokens = output_tokens
+        self.activation = activation
 
-        if fixup_constant > 0.0:
-            kernel_scale = get_fixup_scale(transformer_layers, fixup_constant)
-            embedding_scale = get_embed_scale(embedding_features) * kernel_scale
-        else:
-            # default flax init
-            kernel_scale = 1.0
-        embedding_scale = math.sqrt(1.0 / embedding_features)  # this is actually a smaller value for fan_in
+        kernel_init = nnx.initializers.glorot_normal()
 
+        embedding_scale = math.sqrt(1.0 / embedding_features)
         embedding_init = nnx.initializers.normal(embedding_scale, dtype=dtype)
 
         self.token_embedding = nnx.Embed(
@@ -68,21 +55,15 @@ class Network(nnx.Module):
             self.embedding_dropout = nnx.Dropout(dropout_rate)
             self.output_layer_dropout = nnx.Dropout(self.dropout_rate)
 
-        mlp_activation = nnx.relu
-
         self.transformer_layers = []
         for i in range(transformer_layers):
-            kernel_init = nnx.initializers.variance_scaling(
-                kernel_scale, "fan_avg", "truncated_normal", dtype=dtype
-            )
-
             self.transformer_layers.append(
                 TransformerLayer(
                     num_heads=transformer_heads,
                     features=embedding_features,
                     hidden_features=mlp_features,
                     kernel_init=kernel_init,
-                    mlp_activation=mlp_activation,
+                    mlp_activation=self.activation,
                     dtype=dtype,
                     dropout_rate=dropout_rate,
                     use_layer_norm=layer_norm,
@@ -97,9 +78,7 @@ class Network(nnx.Module):
             (output_tokens, embedding_features),
             output_tokens * embedding_features,
             axis=(-2, -1),
-            kernel_init=nnx.initializers.variance_scaling(
-                kernel_scale, "fan_avg", "truncated_normal"
-            ),
+            kernel_init=kernel_init,
             param_dtype=dtype,
             rngs=rngs,
         )
@@ -107,9 +86,7 @@ class Network(nnx.Module):
         self.final_layer = nnx.Linear(
             output_tokens * embedding_features,
             output_classes,
-            kernel_init=nnx.initializers.variance_scaling(
-                kernel_scale, "fan_avg", "truncated_normal"
-            ),
+            kernel_init=kernel_init,
             param_dtype=dtype,
             rngs=rngs,
         )
@@ -133,7 +110,7 @@ class Network(nnx.Module):
         for transformer in self.transformer_layers:
             x = transformer(x, mask, deterministic, rngs)
 
-        output_tokens = x[..., 0 : self.output_tokens, :]
+        output_tokens = x[..., 0: self.output_tokens, :]
 
         if self.output_layer_norm:
             output_tokens = self.output_layer_norm(output_tokens)
@@ -141,10 +118,8 @@ class Network(nnx.Module):
         out = self.output_layer(output_tokens)
         if self.dropout_rate > 0.0:
             out = self.output_layer_dropout(out, deterministic=deterministic, rngs=rngs)
-        out = nnx.relu(out)
+        out = self.activation(out)
         out = self.final_layer(out)
-
-        # jax.debug.breakpoint()
 
         return out
 
