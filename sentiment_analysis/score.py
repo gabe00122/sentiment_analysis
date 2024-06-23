@@ -16,7 +16,7 @@ def train():
     # jax.config.update("jax_debug_nans", True)
 
     seed = 123
-    batch_size = 512
+    batch_size = 64
     batch_per_call = 250
 
     data = jnp.load("./data/test.npz")
@@ -35,21 +35,20 @@ def train():
     tokens = tokens[:sample_count]
     labels = labels[:sample_count] - 1
 
-    width = 512
     rngs = nnx.Rngs(seed)
     model = Network(
         vocab_size=16000,
         seq_length=115,
         output_tokens=8,
-        embedding_features=width,
-        transformer_layers=6,
+        embedding_features=512,
+        transformer_layers=12,
         transformer_heads=8,
         mlp_features=(2048,),
         max_position_offset=10,
+        activation=nnx.relu,
         output_classes=5,
         dropout_rate=0.1,
         layer_norm=True,
-        fixup_constant=4,
         dtype=jnp.float32,
         rngs=nnx.Rngs(0),
     )

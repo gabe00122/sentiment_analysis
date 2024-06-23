@@ -36,13 +36,12 @@ def train():
 
     total_steps = (sample_count // batch_size) * epochs
 
-    width = 512
     rngs = nnx.Rngs(seed)
     model = Network(
         vocab_size=16000,
         seq_length=115,
         output_tokens=8,
-        embedding_features=width,
+        embedding_features=512,
         transformer_layers=12,
         transformer_heads=8,
         mlp_features=(2048,),
