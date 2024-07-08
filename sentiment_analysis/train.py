@@ -9,68 +9,72 @@ from jax import numpy as jnp, random
 
 from sentiment_analysis.common.checkpointer import Checkpointer
 from sentiment_analysis.common.metrics import TensorboardWriter, create_metrics_buffer, append_buffer, MetricsBuffer
-from sentiment_analysis.model.network import Network
+from sentiment_analysis.model import Model
+from sentiment_analysis.types import ExperimentSettings
+from sentiment_analysis.util import get_calls_per_epoch, get_total_steps, count_params
 
 
-def train():
-    seed = 123
-    batch_size = 64
-    batch_per_call = 250
-    epochs = 20
-
-    data = jnp.load("./data/training.npz")
+def load_data(path):
+    data = jnp.load(path)
     tokens = data['tokens']
     labels = data['labels']
+    return tokens, labels
 
-    sample_count = tokens.shape[0]
-    print(f"Total Samples: {sample_count}")
 
-    samples_per_call = batch_size * batch_per_call
-    gpu_calls_per_epoch = (sample_count // samples_per_call)
-
-    sample_count = gpu_calls_per_epoch * samples_per_call
-    print(f"Rounding To: {sample_count}")
-
-    tokens = tokens[:sample_count]
-    labels = labels[:sample_count] - 1
-
-    total_steps = (sample_count // batch_size) * epochs
-
-    rngs = nnx.Rngs(seed)
-    model = Network(
-        vocab_size=16000,
-        seq_length=115,
-        output_tokens=8,
-        embedding_features=512,
-        transformer_layers=12,
-        transformer_heads=8,
-        mlp_features=(2048,),
-        max_position_offset=10,
-        activation=nnx.relu,
-        output_classes=5,
-        dropout_rate=0.1,
-        layer_norm=True,
-        dtype=jnp.float32,
-        rngs=nnx.Rngs(0),
+def create_optimizer(settings: ExperimentSettings, total_steps: int):
+    learning_rate = optax.warmup_cosine_decay_schedule(
+        0.0, settings.optimizer.learning_rate, settings.optimizer.warmup_steps, total_steps
     )
-    optimizer = nnx.Optimizer(model, optax.adamw(
-        learning_rate=optax.warmup_cosine_decay_schedule(
-            0.0, 0.0001, 6000, total_steps
-        ),
-        weight_decay=0.0001,
-    ))
-    count_params(model)
 
-    checkpoints = Checkpointer("checkpoints5")
-    indices = jnp.arange(sample_count, dtype=jnp.int32)
+    if settings.optimizer.weight_decay > 0:
+        return optax.adamw(
+            learning_rate,
+            b1=settings.optimizer.beta1,
+            b2=settings.optimizer.beta2,
+            eps=settings.optimizer.eps,
+            weight_decay=settings.optimizer.weight_decay
+        )
+    else:
+        return optax.adam(
+            learning_rate,
+            b1=settings.optimizer.beta1,
+            b2=settings.optimizer.beta2,
+            eps=settings.optimizer.eps,
+        )
+
+
+def train(settings: ExperimentSettings):
+    seed = random.PRNGKey(settings.seed)
+    init_key, train_key, shuffle_key = random.split(seed, num=3)
+
+    tokens, labels = load_data(settings.training_file)
+
+    if tokens.shape[-1] != settings.model.context_size:
+        print(f"Model context size {settings.model.context_size} and data context size {tokens.shape[-1]} don't match")
+        return
+
+    samples = tokens.shape[0]
+    print(f"Total Samples: {samples}")
+
+    calls_per_epoch = get_calls_per_epoch(samples, settings)
+    total_steps = get_total_steps(samples, settings)
+
+    optimizer = nnx.Optimizer(
+        Model(settings.model, nnx.Rngs(init_key)),
+        create_optimizer(settings, total_steps)
+    )
+    print(f"Param Count: {count_params(optimizer.model)}")
+
+    checkpoints = Checkpointer("checkpoints")
+    indices = jnp.arange(samples, dtype=jnp.int32)
 
     optimizer_graph, optimizer = nnx.split(optimizer)
-    rngs_graph, rngs = nnx.split(rngs)
+    rngs_graph, rngs = nnx.split(nnx.Rngs(train_key))
 
     static = StaticState(
         optimizer=optimizer_graph,
         rngs=rngs_graph,
-        batch_size=batch_size,
+        batch_size=settings.batch_size,
     )
 
     dynamic = DynamicState(
@@ -83,27 +87,26 @@ def train():
     )
 
     writer = TensorboardWriter(Path("./tensorboard"))
-    indices_rng = random.PRNGKey(42)
 
-    for epoch in range(epochs):
-        rng_key, indices_rng = random.split(indices_rng)
+    for epoch in range(settings.epochs):
+        shuffle_key, consume_rng = random.split(shuffle_key)
         dynamic = dynamic._replace(
             step=0,
-            indices=random.permutation(rng_key, dynamic.indices)
+            indices=random.permutation(consume_rng, dynamic.indices)
         )
 
-        for call in range(gpu_calls_per_epoch):
-            dynamic, metrics = multi_training_step(static, dynamic, batch_per_call)
+        for call in range(calls_per_epoch):
+            dynamic, metrics = multi_training_step(static, dynamic, settings.batch_per_call)
             writer.write(metrics)
 
             loss = metrics.values["loss"].mean().item()
             percent_correct = metrics.values["percent_correct"].mean().item() * 100
 
-            print(f"epoch = {epoch}/{epochs}, step = {call}/{gpu_calls_per_epoch}, loss = {loss}, correct = {percent_correct:.0f}%")
+            print(f"epoch = {epoch}/{settings.epochs}, step = {call}/{calls_per_epoch}, loss = {loss}, correct = {percent_correct:.0f}%")
 
         checkpoints.save(epoch, nnx.merge(optimizer_graph, dynamic.optimizer).model)
 
-    writer.flush()
+    writer.close()
     checkpoints.close()
 
 
@@ -118,9 +121,9 @@ def train_step(model: nnx.Module, optimizer: nnx.Optimizer, indices, tokens, lab
         logit_pred = model(tokens, deterministic=False, rngs=rngs)
         loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logit_pred, labels))
 
-        logits_indices = jnp.argmax(logit_pred, axis=1)
+        predicted_labels = jnp.argmax(logit_pred, axis=-1)
         percent_correct = jnp.mean(
-            logits_indices == labels, dtype=jnp.float32
+            predicted_labels == labels, dtype=jnp.float32
         )
         metrics = {"percent_correct": percent_correct, "loss": loss}
 
@@ -136,6 +139,7 @@ class StaticState(NamedTuple):
     optimizer: nnx.GraphDef
     rngs: nnx.GraphDef
     batch_size: int
+
 
 class DynamicState(NamedTuple):
     step: jax.typing.ArrayLike
@@ -178,13 +182,3 @@ def multi_training_step(static: StaticState, dynamic: DynamicState, batches_per_
         return dynamic, metrics_buffer
 
     return jax.lax.fori_loop(1, batches_per_call, loop_body, (dynamic, metrics_buffer))
-
-
-def count_params(model):
-    params = nnx.state(model, nnx.Param)
-    param_count = sum(x.size for x in jax.tree_util.tree_leaves(params))
-    print(f"Param Count: {param_count}")
-
-
-if __name__ == '__main__':
-    train()

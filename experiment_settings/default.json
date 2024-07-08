@@ -1,0 +1,40 @@
+{
+    "seed": "random",
+    "training_file": "data/training.npz",
+    "validation_file": "data/validation.npz",
+    "epochs": 20,
+    "batch_size": 64,
+    "batch_per_call": 250,
+    "optimizer": {
+        "type": "adamw",
+        "learning_rate": 0.0001,
+        "warmup_steps": 2000,
+        "beta1": 0.9,
+        "beta2": 0.999,
+        "eps": 1e-8,
+        "weight_decay": 0.0001
+    },
+    "model": {
+        "vocab": {
+            "type": "token_monster",
+            "path": "vocab/yelp-16000-consistent-v1.vocab",
+            "size": 16000
+        },
+        "context_size": 115,
+        "hidden_features": 256,
+        "transformer_layers": 6,
+        "transformer_heads": 4,
+        "mlp_feature": 512,
+        "activation": "relu",
+        "max_position_offset": 0,
+        "output": {
+            "type": "classification_tokens",
+            "format": "regression",
+            "mlp_layers": [2048],
+            "output_tokens": 4,
+            "output_classes": 5
+        },
+        "dropout_rate": 0.1,
+        "dtype": "float32"
+    }
+}

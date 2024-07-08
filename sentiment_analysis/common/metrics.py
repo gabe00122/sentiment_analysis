@@ -19,7 +19,7 @@ class Writer(ABC):
     def write(self, metrics: Metrics | MetricsBuffer) -> None: ...
 
     @abstractmethod
-    def flush(self) -> None: ...
+    def close(self) -> None: ...
 
 
 class TensorboardWriter(Writer):
@@ -29,7 +29,6 @@ class TensorboardWriter(Writer):
         self.output_path = output_path
         self.writer = SummaryWriter(os.path.abspath(output_path))
         self.global_step = 0
-        #self.run_name = "test"
 
     def write(self, metrics: Metrics | MetricsBuffer) -> None:
         if isinstance(metrics, MetricsBuffer):
@@ -46,7 +45,7 @@ class TensorboardWriter(Writer):
 
             self.global_step += 1
 
-    def flush(self) -> None:
+    def close(self) -> None:
         self.writer.close()
 
 
@@ -60,7 +59,7 @@ def create_metrics_buffer(metrics: Metrics, capacity: ArrayLike) -> MetricsBuffe
 
     values = {k: create_metric(v) for k, v in metrics.items()}
 
-    return MetricsBuffer(values=values, length=jnp.int32(0))
+    return MetricsBuffer(values=values, length=jnp.int32(1))
 
 
 def append_buffer(metrics_buffer: MetricsBuffer, metrics: Metrics) -> MetricsBuffer:

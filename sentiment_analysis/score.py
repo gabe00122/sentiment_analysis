@@ -9,7 +9,7 @@ from jax import numpy as jnp, random
 
 from sentiment_analysis.common.checkpointer import Checkpointer
 from sentiment_analysis.common.metrics import TensorboardWriter, create_metrics_buffer, append_buffer, MetricsBuffer
-from sentiment_analysis.model.network import Network
+from sentiment_analysis.model.network import Model
 
 
 def train():
@@ -36,11 +36,11 @@ def train():
     labels = labels[:sample_count] - 1
 
     rngs = nnx.Rngs(seed)
-    model = Network(
+    model = Model(
         vocab_size=16000,
-        seq_length=115,
+        context_size=115,
         output_tokens=8,
-        embedding_features=512,
+        hidden_features=512,
         transformer_layers=12,
         transformer_heads=8,
         mlp_features=(2048,),

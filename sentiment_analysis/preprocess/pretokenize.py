@@ -3,6 +3,7 @@ import numpy as np
 from pathlib import Path
 import json
 
+
 def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
     input_path = Path(path).absolute()
     output_path = input_path.with_suffix(".npz")
@@ -20,7 +21,7 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
             if len(tokens) <= max_length:
                 tokens = list(tokens) + ([-1] * (max_length - len(tokens)))
                 output_tokens.append(tokens)
-                output_labels.append(label)
+                output_labels.append(label - 1)
 
             if i % 10_000 == 9_999:
                 total_reviews = len(output_tokens)
@@ -43,7 +44,6 @@ def main():
 
     for p in paths:
         pretokenize(p, vocab, 115)
-
 
 
 if __name__ == '__main__':
