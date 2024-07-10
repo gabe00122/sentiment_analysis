@@ -65,7 +65,7 @@ def train(settings: ExperimentSettings):
     )
     print(f"Param Count: {count_params(optimizer.model)}")
 
-    checkpoints = Checkpointer("checkpoints")
+    checkpoints = Checkpointer("checkpoints_relu2")
     indices = jnp.arange(samples, dtype=jnp.int32)
 
     optimizer_graph, optimizer = nnx.split(optimizer)
@@ -104,7 +104,7 @@ def train(settings: ExperimentSettings):
 
             print(f"epoch = {epoch}/{settings.epochs}, step = {call}/{calls_per_epoch}, loss = {loss}, correct = {percent_correct:.0f}%")
 
-        checkpoints.save(epoch, nnx.merge(optimizer_graph, dynamic.optimizer).model)
+        checkpoints.save(nnx.merge(optimizer_graph, dynamic.optimizer).model, epoch)
 
     writer.close()
     checkpoints.close()

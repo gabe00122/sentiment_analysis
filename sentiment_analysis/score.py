@@ -1,23 +1,22 @@
 from functools import partial
-from pathlib import Path
 from typing import NamedTuple
 
 import jax
-import optax
 from flax import nnx
-from jax import numpy as jnp, random
+from jax import numpy as jnp
 
 from sentiment_analysis.common.checkpointer import Checkpointer
-from sentiment_analysis.common.metrics import TensorboardWriter, create_metrics_buffer, append_buffer, MetricsBuffer
-from sentiment_analysis.model.network import Model
+from sentiment_analysis.common.metrics import create_metrics_buffer, append_buffer, MetricsBuffer
+from sentiment_analysis.model import Model
+from sentiment_analysis.train_cli import load_settings
 
 
 def train():
-    # jax.config.update("jax_debug_nans", True)
+    settings = load_settings("./experiment_settings/tiny.json")
 
-    seed = 123
-    batch_size = 64
-    batch_per_call = 250
+
+    batch_size = settings.batch_size
+    batch_per_call = settings.batch_per_call
 
     data = jnp.load("./data/test.npz")
     tokens = data['tokens']
@@ -33,33 +32,18 @@ def train():
     print(f"Rounding To: {sample_count}")
 
     tokens = tokens[:sample_count]
-    labels = labels[:sample_count] - 1
+    labels = labels[:sample_count]
 
-    rngs = nnx.Rngs(seed)
-    model = Model(
-        vocab_size=16000,
-        context_size=115,
-        output_tokens=8,
-        hidden_features=512,
-        transformer_layers=12,
-        transformer_heads=8,
-        mlp_features=(2048,),
-        max_position_offset=10,
-        activation=nnx.relu,
-        output_classes=5,
-        dropout_rate=0.1,
-        layer_norm=True,
-        dtype=jnp.float32,
-        rngs=nnx.Rngs(0),
-    )
+    model = Model(settings.model, rngs=nnx.Rngs(0))
 
-    checkpoints = Checkpointer("checkpoints4")
-    model = checkpoints.restore_latest(model)
+    checkpoints = Checkpointer("checkpoints")
+    model = checkpoints.restore(model, 0)
 
     indices = jnp.arange(sample_count, dtype=jnp.int32)
 
     model_graph, model_state = nnx.split(model)
 
+    rngs = nnx.Rngs(0)
     rngs_graph, rngs = nnx.split(rngs)
 
     static = StaticState(

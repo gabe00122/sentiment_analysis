@@ -36,7 +36,7 @@ def create_tokenizer_corpus(data_path: Path, config: TokenizerCorpusConfig):
 
 
 def main():
-    config_text = Path("./experiments_settings/corpus.json").read_text()
+    config_text = Path("./experiment_settings/corpus.json").read_text()
     config = TokenizerCorpusConfig.model_validate_json(config_text)
     create_tokenizer_corpus(Path("./data/training.json"), config)
 

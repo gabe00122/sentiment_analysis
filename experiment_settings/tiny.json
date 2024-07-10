@@ -2,8 +2,8 @@
     "seed": "random",
     "training_file": "data/training.npz",
     "validation_file": "data/validation.npz",
-    "epochs": 4,
-    "batch_size": 64,
+    "epochs": 1,
+    "batch_size": 512,
     "batch_per_call": 2,
     "optimizer": {
         "type": "adamw",
@@ -17,8 +17,8 @@
     "model": {
         "vocab": {
             "type": "token_monster",
-            "path": "vocab/yelp-16000-consistent-v1.vocab",
-            "size": 16000
+            "path": "vocab/yelp-32000-strict-v1.vocab",
+            "size": 32000
         },
         "context_size": 115,
         "hidden_features": 256,

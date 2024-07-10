@@ -111,10 +111,17 @@ def make_mask(inputs):
     return mask
 
 
+def relu2(x):
+    x = nnx.relu(x)
+    return x * x
+
+
 def activation_by_name(name: str) -> Callable[[Array], Array]:
     match name:
         case 'relu':
             return nnx.relu
+        case 'relu2':
+            return relu2
 
 
 def dtype_by_name(name: str):
