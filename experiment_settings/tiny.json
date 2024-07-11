@@ -17,7 +17,7 @@
     "model": {
         "vocab": {
             "type": "token_monster",
-            "path": "vocab/yelp-32000-strict-v1.vocab",
+            "path": "vocab/yelp-32000-consistent-oneword-v1.vocab",
             "size": 32000
         },
         "context_size": 115,
