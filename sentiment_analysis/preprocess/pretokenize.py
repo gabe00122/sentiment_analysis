@@ -35,7 +35,7 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
 
 
 def main():
-    vocab = tokenmonster.load("./vocab/yelp-32000-strict-v1.vocab")
+    vocab = tokenmonster.load("./vocab/yelp-32000-consistent-oneword-v1.vocab")
     paths = [
         "./data/test.json",
         "./data/training.json",

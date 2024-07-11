@@ -11,6 +11,7 @@ from sentiment_analysis.common.checkpointer import Checkpointer
 from sentiment_analysis.common.metrics import TensorboardWriter, create_metrics_buffer, append_buffer, MetricsBuffer
 from sentiment_analysis.model import Model
 from sentiment_analysis.types import ExperimentSettings
+from sentiment_analysis.experiment import Experiment
 from sentiment_analysis.util import get_calls_per_epoch, get_total_steps, count_params
 
 
@@ -43,7 +44,8 @@ def create_optimizer(settings: ExperimentSettings, total_steps: int):
         )
 
 
-def train(settings: ExperimentSettings):
+def train(experiment: Experiment):
+    settings = experiment.settings
     seed = random.PRNGKey(settings.seed)
     init_key, train_key, shuffle_key = random.split(seed, num=3)
 
@@ -65,7 +67,7 @@ def train(settings: ExperimentSettings):
     )
     print(f"Param Count: {count_params(optimizer.model)}")
 
-    checkpoints = Checkpointer("checkpoints_relu2")
+    checkpoints = Checkpointer(experiment.checkpoint_path)
     indices = jnp.arange(samples, dtype=jnp.int32)
 
     optimizer_graph, optimizer = nnx.split(optimizer)

@@ -8,7 +8,7 @@ from jax import numpy as jnp
 from sentiment_analysis.common.checkpointer import Checkpointer
 from sentiment_analysis.common.metrics import create_metrics_buffer, append_buffer, MetricsBuffer
 from sentiment_analysis.model import Model
-from sentiment_analysis.train_cli import load_settings
+from sentiment_analysis.experiment import load_settings
 
 
 def train():
@@ -36,7 +36,7 @@ def train():
 
     model = Model(settings.model, rngs=nnx.Rngs(0))
 
-    checkpoints = Checkpointer("checkpoints")
+    checkpoints = Checkpointer("results/tiny_2024-07-10_21-30-26/checkpoints")
     model = checkpoints.restore(model, 0)
 
     indices = jnp.arange(sample_count, dtype=jnp.int32)
