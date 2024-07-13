@@ -27,7 +27,8 @@ class ModelSettings:
     transformer_heads: int
     mlp_feature: int
     activation: Literal['relu', 'relu2']
+    normalization: Literal['layer', 'rms']
     max_position_offset: int
     output: OutputSettings
     dropout_rate: float
-    dtype: Literal['float32', 'float16']
+    dtype: Literal['float32', 'float16', 'bfloat16']

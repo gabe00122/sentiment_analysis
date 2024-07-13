@@ -19,6 +19,7 @@ class Model(nnx.Module):
 
         dtype = dtype_by_name(self.settings.dtype)
         self.activation = activation_by_name(self.settings.activation)
+        normalization = norm_by_name(self.settings.normalization)
         kernel_init = nnx.initializers.glorot_normal()
 
         embedding_scale = math.sqrt(1.0 / settings.hidden_features)
@@ -58,6 +59,7 @@ class Model(nnx.Module):
                     mlp_features=settings.mlp_feature,
                     kernel_init=kernel_init,
                     mlp_activation=self.activation,
+                    normalization=normalization,
                     dtype=dtype,
                     dropout_rate=settings.dropout_rate,
                     decode=False,
@@ -66,7 +68,7 @@ class Model(nnx.Module):
             )
 
         if settings.output.type == 'classification_tokens':
-            self.output_norm = nnx.LayerNorm(settings.hidden_features, rngs=rngs, dtype=dtype)
+            self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype)
             self.output_layer = nnx.LinearGeneral(
                 (settings.output.output_tokens, settings.hidden_features),
                 settings.output.output_classes if settings.output.type == 'classification_tokens' else 1,
@@ -130,3 +132,12 @@ def dtype_by_name(name: str):
             return jnp.float32
         case 'float16':
             return jnp.float16
+        case 'bfloat16':
+            return jnp.bfloat16
+
+def norm_by_name(name: str):
+    match name:
+        case 'rms':
+            return nnx.RMSNorm
+        case 'layer':
+            return nnx.LayerNorm

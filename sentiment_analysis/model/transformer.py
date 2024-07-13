@@ -13,13 +13,14 @@ class TransformerLayer(nnx.Module):
         mlp_features: int,
         kernel_init,
         mlp_activation: Callable[[Array], Array],
+        normalization,
         dtype: DTypeLike,
         dropout_rate: float,
         decode: bool,
         rngs: nnx.Rngs,
     ):
-        self.pre_attention_norm = nnx.LayerNorm(features, param_dtype=dtype, rngs=rngs)
-        self.pre_mlp_norm = nnx.LayerNorm(features, param_dtype=dtype, rngs=rngs)
+        self.pre_attention_norm = normalization(features, param_dtype=dtype, rngs=rngs)
+        self.pre_mlp_norm = normalization(features, param_dtype=dtype, rngs=rngs)
 
         if dropout_rate > 0.0:
             self.dropout = nnx.Dropout(dropout_rate)
