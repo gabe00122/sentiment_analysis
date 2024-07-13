@@ -3,14 +3,14 @@
     "training_file": "data/training.npz",
     "validation_file": "data/validation.npz",
     "epochs": 1,
-    "batch_size": 512,
-    "batch_per_call": 2,
+    "batch_size": 128,
+    "batch_per_call": 0,
     "optimizer": {
         "type": "adamw",
         "learning_rate": 0.0001,
         "warmup_steps": 1000,
         "beta1": 0.9,
-        "beta2": 0.999,
+        "beta2": 0.95,
         "eps": 1e-8,
         "weight_decay": 0.0001
     },
@@ -21,11 +21,12 @@
             "size": 32000
         },
         "context_size": 115,
-        "hidden_features": 256,
-        "transformer_layers": 3,
-        "transformer_heads": 4,
-        "mlp_feature": 512,
+        "hidden_features": 192,
+        "transformer_layers": 6,
+        "transformer_heads": 6,
+        "mlp_feature": 3072,
         "activation": "relu",
+        "normalization": "rms",
         "max_position_offset": 30,
         "output": {
             "type": "classification_tokens",
@@ -34,6 +35,6 @@
             "output_classes": 5
         },
         "dropout_rate": 0.1,
-        "dtype": "float32"
+        "dtype": "bfloat16"
     }
 }
