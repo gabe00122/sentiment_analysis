@@ -1,145 +1,78 @@
 from functools import partial
+from pathlib import Path
 from typing import NamedTuple
+import time
 
 import jax
 from flax import nnx
 from jax import numpy as jnp
 
 from sentiment_analysis.common.checkpointer import Checkpointer
-from sentiment_analysis.common.metrics import create_metrics_buffer, append_buffer, MetricsBuffer
 from sentiment_analysis.model import Model
 from sentiment_analysis.experiment import load_settings
+from sentiment_analysis.common.dataset_iterator import TrainingData
 
 
-def train():
-    settings = load_settings("./experiment_settings/tiny.json")
+def score():
+    path = Path("results/large_2024-07-13_15-24-34")
+    settings = load_settings(path / "settings.json")
 
-
-    batch_size = settings.batch_size
-    batch_per_call = settings.batch_per_call
-
-    data = jnp.load("./data/test.npz")
+    data = jnp.load("./data/validation.npz")
     tokens = data['tokens']
     labels = data['labels']
 
-    sample_count = tokens.shape[0]
-    print(f"Total Samples: {sample_count}")
-
-    samples_per_call = batch_size * batch_per_call
-    gpu_calls_per_epoch = (sample_count // samples_per_call)
-
-    sample_count = gpu_calls_per_epoch * samples_per_call
-    print(f"Rounding To: {sample_count}")
-
-    tokens = tokens[:sample_count]
-    labels = labels[:sample_count]
+    samples = tokens.shape[0]
+    steps = samples // settings.batch_size
+    samples = steps * settings.batch_size
 
     model = Model(settings.model, rngs=nnx.Rngs(0))
 
-    checkpoints = Checkpointer("results/tiny_2024-07-10_21-30-26/checkpoints")
+    checkpoints = Checkpointer(path / "checkpoints")
     model = checkpoints.restore(model, 0)
 
-    indices = jnp.arange(sample_count, dtype=jnp.int32)
+    indices = jnp.arange(samples, dtype=jnp.uint32)
+    batch = TrainingData(jnp.uint32(0), tokens, labels, indices)
 
-    model_graph, model_state = nnx.split(model)
+    output = jnp.zeros(steps, jnp.float32)
 
-    rngs = nnx.Rngs(0)
-    rngs_graph, rngs = nnx.split(rngs)
+    for step in range(steps):
+        start_time = time.time()
 
-    static = StaticState(
-        model=model_graph,
-        rngs=rngs_graph,
-        batch_size=batch_size,
-    )
+        batch, output = eval_step(model, settings.batch_size, batch, output)
 
-    dynamic = DynamicState(
-        step=0,
-        model=model_state,
-        rngs=rngs,
-        indices=indices,
-        tokens=tokens,
-        labels=labels
-    )
+        output[step].block_until_ready()
+        end_time = time.time()
+        delta_time = end_time - start_time
+        samples_per_second = settings.batch_size / delta_time
 
-    output = jnp.zeros(gpu_calls_per_epoch, jnp.float32)
-    for call in range(gpu_calls_per_epoch):
-        dynamic, metrics = multi_training_step(static, dynamic, batch_per_call)
+        print(f"step = {step}/{steps}, perf = {samples_per_second:.2f}")
 
-        percent_correct = metrics.values["percent_correct"].mean().item() * 100
-        output = output.at[call].set(percent_correct)
+    print(f"output = {(output.mean().item() * 100):.2f}%")
 
-        print(f"step = {call}/{gpu_calls_per_epoch}, correct = {percent_correct:.0f}%")
-
-    print(f"output = {output.mean().item():.2f}%")
+    # jax.profiler.save_device_memory_profile("memory.prof")
 
     checkpoints.close()
 
-def train_step(model: nnx.Module, indices, tokens, labels, batch_size: int, step: int, rngs: nnx.Rngs):
+
+@partial(nnx.jit, static_argnums=1, donate_argnums=(2, 3))
+def eval_step(model, batch_size: int, batch: TrainingData, output: jax.Array) -> jax.Array:
+    step = batch.step
     indices = jax.lax.dynamic_slice(
-        indices, (batch_size * step,), (batch_size,)
+        batch.indices, (batch_size * step,), (batch_size,)
     )
-    tokens = tokens[indices]
-    labels = labels[indices]
+    tokens = batch.tokens[indices]
+    labels = batch.labels[indices]
 
-    logit_pred = model(tokens, deterministic=False, rngs=rngs)
+    logit_pred = model(tokens, deterministic=True, rngs=None)
+    predicted_labels = jnp.argmax(logit_pred, axis=-1)
 
-    logits_indices = jnp.argmax(logit_pred, axis=1)
-    percent_correct = jnp.mean(
-        logits_indices == labels, dtype=jnp.float32
-    )
-    metrics = {"percent_correct": percent_correct}
+    percent_correct = jnp.mean(predicted_labels == labels, dtype=jnp.float32)
+    output = output.at[step].set(percent_correct)
 
+    batch = batch._replace(step=step+1)
 
-    return metrics
-
-
-class StaticState(NamedTuple):
-    model: nnx.GraphDef
-    rngs: nnx.GraphDef
-    batch_size: int
-
-class DynamicState(NamedTuple):
-    step: jax.typing.ArrayLike
-    model: nnx.State
-    rngs: nnx.State
-    indices: jax.Array
-    tokens: jax.Array
-    labels: jax.Array
-
-
-def training_step_wrapper(static: StaticState, dynamic: DynamicState) -> tuple[DynamicState, dict[str, jax.Array]]:
-    model = nnx.merge(static.model, dynamic.model)
-    rngs = nnx.merge(static.rngs, dynamic.rngs)
-
-    metrics = train_step(model, dynamic.indices, dynamic.tokens, dynamic.labels, static.batch_size, dynamic.step, rngs)
-
-    dynamic = dynamic._replace(
-        model=nnx.state(model),
-        rngs=nnx.state(rngs),
-        step=dynamic.step + 1
-    )
-
-    return dynamic, metrics
-
-
-@partial(jax.jit, static_argnums=(0, 2), donate_argnums=1)
-def multi_training_step(static: StaticState, dynamic: DynamicState, batches_per_call: int) -> tuple[DynamicState, MetricsBuffer]:
-    dynamic, metrics = training_step_wrapper(static, dynamic)
-    metrics_buffer = create_metrics_buffer(metrics, batches_per_call)
-
-    if batches_per_call <= 1:
-        return dynamic, metrics_buffer
-
-    def loop_body(i, curry) -> tuple[DynamicState, MetricsBuffer]:
-        dynamic, metrics_buffer = curry
-
-        dynamic, metrics = training_step_wrapper(static, dynamic)
-        metrics_buffer = append_buffer(metrics_buffer, metrics)
-
-        return dynamic, metrics_buffer
-
-    return jax.lax.fori_loop(1, batches_per_call, loop_body, (dynamic, metrics_buffer))
+    return batch, output
 
 
 if __name__ == '__main__':
-    train()
+    score()

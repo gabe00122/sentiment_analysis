@@ -15,12 +15,13 @@ from sentiment_analysis.experiment import Experiment
 from sentiment_analysis.model import Model
 from sentiment_analysis.types import ExperimentSettings
 from sentiment_analysis.util import count_params
+from sentiment_analysis.common.dataset_iterator import read_training_data, TrainingData, create_training_data
 
 
 def set_flags():
     os.environ['XLA_FLAGS'] = (
         "--xla_gpu_enable_triton_softmax_fusion=true "
-        "--xla_gpu_triton_gemm_any=true "
+        "--xla_gpu_triton_gemm_any=false "
     )
 
 def load_data(path):
@@ -78,22 +79,20 @@ def train(experiment: Experiment):
     print(f"Param Count: {count_params(optimizer.model)}")
 
     checkpoints = Checkpointer(experiment.checkpoint_path)
-    indices = jnp.arange(samples, dtype=jnp.int32)
     rngs = nnx.Rngs(train_key)
 
     writer = TensorboardWriter(Path("./tensorboard"))
 
-    for epoch in range(settings.epochs):
-        shuffle_key, consume_rng = random.split(shuffle_key)
-        indices = random.permutation(consume_rng, indices)
+    training_data = create_training_data(tokens, labels, shuffle_key)
 
-        for step in range(20):
+    for epoch in range(settings.epochs):
+        for step in range(steps):
             start_time = time.time()
-            metrics, optimizer, rngs = jit_train_step(optimizer, rngs, Static(settings.batch_size, False), Dynamic(step, indices, tokens, labels))
+            training_data, metrics = train_step(optimizer, rngs, settings.batch_size, training_data)
             writer.write(metrics)
 
-            loss = metrics["loss"].mean().item()
-            percent_correct = metrics["percent_correct"].mean().item() * 100
+            loss = metrics["loss"].item()
+            percent_correct = metrics["percent_correct"].item() * 100
 
             end_time = time.time()
             delta_time = end_time - start_time
@@ -101,22 +100,10 @@ def train(experiment: Experiment):
 
             print(f"epoch = {epoch}/{settings.epochs}, step = {step}/{steps}, loss = {loss}, correct = {percent_correct:.0f}%, perf = {samples_per_second:.2f}")
 
-
-        checkpoints.save(optimizer.model, epoch)
+    checkpoints.save(optimizer.model, epoch)
 
     writer.close()
     checkpoints.close()
-
-class Static(NamedTuple):
-    batch_size: int
-    metrics_only: bool
-
-
-class Dynamic(NamedTuple):
-    step: jax.typing.ArrayLike
-    indices: jax.Array
-    tokens: jax.Array
-    labels: jax.Array
 
 
 def loss_fn(model, tokens, labels, rngs):
@@ -130,44 +117,13 @@ def loss_fn(model, tokens, labels, rngs):
 
     return loss, metrics
 
-def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, static: Static, dynamic: Dynamic) -> Metrics:
-    model = optimizer.model
 
-    indices = jax.lax.dynamic_slice(
-        dynamic.indices, (static.batch_size * dynamic.step,), (static.batch_size,)
-    )
-    tokens = dynamic.tokens[indices]
-    labels = dynamic.labels[indices]
+@partial(nnx.jit, static_argnums=2, donate_argnums=3)
+def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, training_data: TrainingData) -> tuple[TrainingData, Metrics]:
+    training_data, tokens, labels = read_training_data(training_data, rngs.shuffle(), batch_size)
 
-    if static.metrics_only:
-        _, metrics = loss_fn(model, tokens, labels, rngs)
-    else:
-        grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(model, tokens, labels, rngs)
-        optimizer.update(grads)
+    grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(optimizer.model, tokens, labels, rngs)
+    optimizer.update(grads)
 
-    return metrics
+    return training_data, metrics
 
-
-@partial(jax.jit, static_argnames=('optimizer_graph', 'rngs_graph', 'static'), donate_argnames=('optimizer_state', 'rngs_state'))
-def wrapper(optimizer_graph, optimizer_state, rngs_graph, rngs_state, static, dynamic):
-    optimizer = nnx.merge(optimizer_graph, optimizer_state)
-    rngs = nnx.merge(rngs_graph, rngs_state)
-
-    metrics = train_step(optimizer, rngs, static, dynamic)
-
-    optimizer_state = nnx.state(optimizer)
-    rngs_state = nnx.state(rngs)
-
-    return metrics, optimizer_state, rngs_state
-
-
-def jit_train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, static: Static, dynamic: Dynamic) -> (Metrics, nnx.Optimizer, nnx.Rngs):
-    optimizer_graph, optimizer_state = nnx.split(optimizer)
-    rngs_graph, rngs_state = nnx.split(rngs)
-
-    metrics, optimizer_state, rngs_state = wrapper(optimizer_graph, optimizer_state, rngs_graph, rngs_state, static, dynamic)
-
-    optimizer = nnx.merge(optimizer_graph, optimizer_state)
-    rngs = nnx.merge(rngs_graph, rngs_state)
-
-    return metrics, optimizer, rngs
