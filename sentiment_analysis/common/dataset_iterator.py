@@ -31,3 +31,11 @@ def create_training_data(tokens: jax.Array, labels: jax.Array, shuffle_key) -> T
     indices = random.permutation(shuffle_key, indices)
 
     return TrainingData(jnp.uint32(0), tokens, labels, indices)
+
+
+def load_training_data(path: str, shuffle_key) -> TrainingData:
+    data = jnp.load(path, )
+    tokens = data['tokens']
+    labels = data['labels']
+
+    return create_training_data(tokens, labels, shuffle_key)
