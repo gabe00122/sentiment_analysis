@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from random import getrandbits
 from dataclasses import replace
@@ -49,12 +50,12 @@ class Experiment:
 
 
     @cached_property
-    def id(self):
+    def run_name(self):
         return f"{self.name}_{self._file_time_format}"
 
     @cached_property
     def path(self) -> Path:
-        return Path("results") / Path(self.id)
+        return Path("results") / Path(self.run_name)
 
     @cached_property
     def _file_time_format(self) -> str:
@@ -73,6 +74,10 @@ class Experiment:
         experiment.init_dir()
 
         return experiment
+
+    def save_results(self, data):
+        path = self.path / "results.json"
+        path.write_text(json.dumps(data))
 
 
 def load_settings(file: str | Path) -> ExperimentSettings:

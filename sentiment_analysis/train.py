@@ -2,49 +2,29 @@ import os
 import time
 from functools import partial
 from pathlib import Path
-from typing import NamedTuple
 
-import jax
 import optax
 from flax import nnx
+import jax
 from jax import numpy as jnp, random
+import numpy as np
 
 from sentiment_analysis.common.checkpointer import Checkpointer
+from sentiment_analysis.common.dataset_iterator import read_training_data, TrainingData, load_training_data
 from sentiment_analysis.common.metrics import TensorboardWriter, Metrics
 from sentiment_analysis.experiment import Experiment
-from sentiment_analysis.model import Model
-from sentiment_analysis.types import ExperimentSettings
-from sentiment_analysis.util import count_params
-from sentiment_analysis.common.dataset_iterator import read_training_data, TrainingData, load_training_data
+from sentiment_analysis.optimizer import create_optimizer
 
+
+def count_params(model) -> int:
+    params = nnx.state(model, nnx.Param)
+    return sum(x.size for x in jax.tree_util.tree_leaves(params))
 
 def set_flags():
     os.environ['XLA_FLAGS'] = (
         "--xla_gpu_enable_triton_softmax_fusion=true "
         "--xla_gpu_triton_gemm_any=false "
     )
-
-
-def create_optimizer(settings: ExperimentSettings, total_steps: int):
-    learning_rate = optax.warmup_cosine_decay_schedule(
-        0.0, settings.optimizer.learning_rate, settings.optimizer.warmup_steps, total_steps
-    )
-
-    if settings.optimizer.weight_decay > 0:
-        return optax.adamw(
-            learning_rate,
-            b1=settings.optimizer.beta1,
-            b2=settings.optimizer.beta2,
-            eps=settings.optimizer.eps,
-            weight_decay=settings.optimizer.weight_decay
-        )
-    else:
-        return optax.adam(
-            learning_rate,
-            b1=settings.optimizer.beta1,
-            b2=settings.optimizer.beta2,
-            eps=settings.optimizer.eps,
-        )
 
 
 def train(experiment: Experiment):
@@ -54,6 +34,7 @@ def train(experiment: Experiment):
     seed = random.PRNGKey(settings.seed)
 
     init_key, train_key, training_shuffle_key, validation_shuffle_key = random.split(seed, num=4)
+    init_rngs = nnx.Rngs(init_key)
     rngs = nnx.Rngs(train_key)
 
     training_data = load_training_data(settings.training_file, training_shuffle_key)
@@ -68,46 +49,59 @@ def train(experiment: Experiment):
 
     print(f"Total Samples: {samples}")
 
-    steps = samples // settings.batch_size
-    total_steps = steps * settings.epochs
-
-    optimizer = nnx.Optimizer(
-        Model(settings.model, nnx.Rngs(init_key)),
-        create_optimizer(settings, total_steps)
-    )
+    optimizer = create_optimizer(settings, init_rngs, training_data)
     print(f"Param Count: {count_params(optimizer.model)}")
 
     checkpoints = Checkpointer(experiment.checkpoint_path)
-    writer = TensorboardWriter(Path("./tensorboard"))
+    writer = TensorboardWriter(Path("./tensorboard"), experiment.run_name)
 
+    steps = samples // settings.batch_size
+    total_steps = steps * settings.epochs
+    checkpoint_rate = 10_000
+    validation_rate = 20
 
-    for epoch in range(settings.epochs):
-        for step in range(steps):
-            start_time = time.time()
-            training_data, metrics = train_step(optimizer, rngs, settings.batch_size, training_data, False)
+    for global_step in range(total_steps):
+        start_time = time.time()
+        training_data, metrics = train_step(optimizer, rngs, settings.batch_size, training_data, True)
 
-            validation_data, val_metrics = train_step(optimizer, rngs, settings.batch_size, validation_data, True)
-
-            writer.write(metrics)
-
-            loss = metrics["loss"].item()
-            percent_correct = metrics["percent_correct"].item() * 100
+        if global_step % validation_rate == validation_rate - 1:
+            validation_data, val_metrics = train_step(optimizer, rngs, settings.batch_size, validation_data, False)
+            writer.write(val_metrics, global_step, "validation")
 
             val_loss = val_metrics["loss"].item()
             val_correct = val_metrics["percent_correct"].item() * 100
+            print(f"validation loss = {val_loss:.4f}, validation correct = {val_correct:.1f}%")
 
-            end_time = time.time()
-            delta_time = end_time - start_time
-            samples_per_second = settings.batch_size / delta_time
+        writer.write(metrics, global_step, "training")
 
-            print(f"epoch = {epoch}/{settings.epochs}, step = {step}/{steps}, loss = {loss}, correct = {percent_correct:.0f}%, perf = {samples_per_second:.2f}")
-            print(f"val-loss = {val_loss}, val-correct = {val_correct:.0f}%")
+        loss = metrics["loss"].item()
+        percent_correct = metrics["percent_correct"].item() * 100
+
+        end_time = time.time()
+        delta_time = end_time - start_time
+        samples_per_second = settings.batch_size / delta_time
+
+        epoch = global_step // steps
+        step = global_step % steps
+
+        print(f"epoch = {epoch}/{settings.epochs}, step = {step}/{steps}, loss = {loss:.4f}, correct = {percent_correct:.1f}%, perf = {samples_per_second:.2f}")
+
+        if global_step % checkpoint_rate == checkpoint_rate - 1:
+            print("Saving checkpoint")
+            checkpoints.save(optimizer.model, global_step)
 
 
-        checkpoints.save(optimizer.model, epoch)
-
-    writer.close()
+    print("Saving final checkpoint")
+    checkpoints.save(optimizer.model, total_steps - 1)
     checkpoints.close()
+    writer.close()
+
+    print("Running validation")
+    validation_accuracy = validate(optimizer, rngs, settings.batch_size, validation_data)
+    print(f"Validation accuracy {validation_accuracy:.1f}%")
+    experiment.save_results({"validation_accuracy": validation_accuracy})
+
+    print("Experiment complete 🎉")
 
 
 def loss_fn(model, tokens, labels, rngs, training: bool):
@@ -134,3 +128,15 @@ def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, traini
 
     return training_data, metrics
 
+
+def validate(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, validation_data: TrainingData) -> float:
+    steps = validation_data.tokens[0] // batch_size
+
+    output = np.zeros((steps,), dtype=np.float32)
+    for step in range(steps):
+        validation_data, metrics = train_step(optimizer, rngs, batch_size, validation_data, False)
+        percent_correct = metrics["percent_correct"].item() * 100
+        output[step] = percent_correct
+        print(f"percent_correct = {percent_correct:.1f}%")
+
+    return output.mean().item()

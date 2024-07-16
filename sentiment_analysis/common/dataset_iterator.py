@@ -11,10 +11,10 @@ class TrainingData(NamedTuple):
 
 def reset_batch(batch: TrainingData, rng_key):
     indices = random.permutation(rng_key, batch.indices)
-    return batch._replace(indices=indices)
+    return batch._replace(step=jnp.uint32(0), indices=indices)
 
 def read_training_data(batch: TrainingData, rng_key, batch_size: int) -> tuple[TrainingData, jax.Array, jax.Array]:
-    steps = batch.indices.shape[0] * batch_size
+    steps = batch.indices.shape[0] // batch_size
 
     batch = jax.lax.cond(batch.step >= steps, lambda: reset_batch(batch, rng_key), lambda: batch)
 

@@ -14,7 +14,7 @@ from sentiment_analysis.common.dataset_iterator import TrainingData
 
 
 def score():
-    path = Path("results/large_2024-07-13_15-24-34")
+    path = Path("results/nano_2024-07-14_21-20-28")
     settings = load_settings(path / "settings.json")
 
     data = jnp.load("./data/validation.npz")
@@ -28,7 +28,7 @@ def score():
     model = Model(settings.model, rngs=nnx.Rngs(0))
 
     checkpoints = Checkpointer(path / "checkpoints")
-    model = checkpoints.restore(model, 0)
+    model = checkpoints.restore_latest(model)
 
     indices = jnp.arange(samples, dtype=jnp.uint32)
     batch = TrainingData(jnp.uint32(0), tokens, labels, indices)
