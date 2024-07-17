@@ -71,7 +71,7 @@ class Model(nnx.Module):
             self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype)
             self.output_layer = nnx.LinearGeneral(
                 (settings.output.output_tokens, settings.hidden_features),
-                settings.output.output_classes if settings.output.type == 'classification_tokens' else 1,
+                settings.output.output_classes if settings.output.format == 'softmax' else 1,
                 axis=(-2, -1),
                 kernel_init=kernel_init,
                 param_dtype=dtype,

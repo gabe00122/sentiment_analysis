@@ -1,5 +1,5 @@
 {
-    "seed": "random",
+    "seed": "123",
     "training_file": "data/training.npz",
     "validation_file": "data/validation.npz",
     "epochs": 4,
@@ -30,7 +30,7 @@
         "max_position_offset": 30,
         "output": {
             "type": "classification_tokens",
-            "format": "softmax",
+            "format": "regression",
             "output_tokens": 4,
             "output_classes": 5
         },

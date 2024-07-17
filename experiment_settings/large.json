@@ -7,7 +7,7 @@
     "batch_per_call": 0,
     "optimizer": {
         "type": "adamw",
-        "learning_rate": 0.0001,
+        "learning_rate": 0.000025,
         "warmup_steps": 1000,
         "beta1": 0.9,
         "beta2": 0.95,
@@ -30,7 +30,7 @@
         "max_position_offset": 30,
         "output": {
             "type": "classification_tokens",
-            "format": "regression",
+            "format": "softmax",
             "output_tokens": 4,
             "output_classes": 5
         },

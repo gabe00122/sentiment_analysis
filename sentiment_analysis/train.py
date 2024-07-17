@@ -31,7 +31,7 @@ def train(experiment: Experiment):
     set_flags()
 
     settings = experiment.settings
-    seed = random.PRNGKey(settings.seed)
+    seed = random.PRNGKey(123)
 
     init_key, train_key, training_shuffle_key, validation_shuffle_key = random.split(seed, num=4)
     init_rngs = nnx.Rngs(init_key)
@@ -104,7 +104,7 @@ def train(experiment: Experiment):
     print("Experiment complete 🎉")
 
 
-def loss_fn(model, tokens, labels, rngs, training: bool):
+def classification_loss_fn(model, tokens, labels, rngs, training: bool):
     logit_pred = model(tokens, deterministic=not training, rngs=rngs)
 
     loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logit_pred, labels))
@@ -116,9 +116,29 @@ def loss_fn(model, tokens, labels, rngs, training: bool):
     return loss, metrics
 
 
+def regressive_loss_fn(model, tokens, labels, rngs, training: bool):
+    class_scale = model.settings.output.output_classes
+
+    pred = nnx.sigmoid(jnp.squeeze(model(tokens, deterministic=not training, rngs=rngs)))
+
+    scaled_down_labels = (labels + 0.5) / class_scale
+    loss = jnp.mean((pred - scaled_down_labels) ** 2)
+
+    predicted_labels = jnp.floor(pred * class_scale)
+    percent_correct = jnp.mean(predicted_labels == labels, dtype=jnp.float32)
+    metrics = {"percent_correct": percent_correct, "loss": loss}
+
+    return loss, metrics
+
+
 @partial(nnx.jit, static_argnums=(2, 4), donate_argnums=3)
 def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, training_data: TrainingData, training: bool) -> tuple[TrainingData, Metrics]:
     training_data, tokens, labels = read_training_data(training_data, rngs.shuffle(), batch_size)
+
+    if optimizer.model.settings.output.format == 'regression':
+        loss_fn = regressive_loss_fn
+    else:
+        loss_fn = classification_loss_fn
 
     if training:
         grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(optimizer.model, tokens, labels, rngs, training)
@@ -130,7 +150,7 @@ def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, traini
 
 
 def validate(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, validation_data: TrainingData) -> float:
-    steps = validation_data.tokens[0] // batch_size
+    steps = validation_data.tokens.shape[0] // batch_size
 
     output = np.zeros((steps,), dtype=np.float32)
     for step in range(steps):
