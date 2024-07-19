@@ -37,32 +37,36 @@ class PositionalEmbeddings(nnx.Module):
         max_offset: int,
         scale: float,
         dtype: DTypeLike,
+        param_dtype: DTypeLike,
     ):
+        self.dtype = dtype
         self.max_offset = max_offset
         self.context_size = context_size
         self.embedding = nnx.Param(
             get_positional_embeddings(
-                context_size + max_offset, embedding_features, dtype=dtype
+                context_size + max_offset, embedding_features, dtype=param_dtype
             )
-            * jnp.array(scale, dtype=dtype)
+            * jnp.array(scale, dtype=param_dtype)
         )
 
     def __call__(self, batch_size: int, deterministic: bool, rngs: nnx.Rngs):
         embeddings = self.embedding.value
 
         if self.max_offset == 0:
-            return embeddings
+            out = embeddings
 
-        if deterministic:
+        elif deterministic:
             half_offset = self.max_offset // 2
-            return embeddings[half_offset: half_offset + self.context_size]
+            out = embeddings[half_offset: half_offset + self.context_size]
 
-        if batch_size > 0:
+        elif batch_size > 0:
             rng_batch = random.split(rngs.position(), batch_size)
-            return jax.vmap(randomize_offsets, in_axes=(0, None, None, None))(
+            out = jax.vmap(randomize_offsets, in_axes=(0, None, None, None))(
                 rng_batch, embeddings, self.context_size, self.max_offset
             )
+        else:
+            out = randomize_offsets(
+                rngs.position(), embeddings, self.context_size, self.max_offset
+            )
 
-        return randomize_offsets(
-            rngs.position(), embeddings, self.context_size, self.max_offset
-        )
+        return jnp.asarray(out, dtype=self.dtype)

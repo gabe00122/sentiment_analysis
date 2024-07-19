@@ -18,23 +18,26 @@ class Model(nnx.Module):
         self.settings = settings
 
         dtype = dtype_by_name(self.settings.dtype)
+        param_dtype = dtype_by_name(self.settings.dtype)
+
         self.activation = activation_by_name(self.settings.activation)
         normalization = norm_by_name(self.settings.normalization)
         kernel_init = nnx.initializers.glorot_normal()
 
         embedding_scale = math.sqrt(1.0 / settings.hidden_features)
-        embedding_init = nnx.initializers.normal(embedding_scale, dtype=dtype)
+        embedding_init = nnx.initializers.normal(embedding_scale)
 
         vocab_size = settings.vocab.size
         context_size = settings.context_size
-        if settings.output.output_tokens:
+        if settings.output.type == 'classification_tokens':
             vocab_size += settings.output.output_tokens
             context_size += settings.output.output_tokens
 
         self.token_embedding = nnx.Embed(
             vocab_size,
             settings.hidden_features,
-            param_dtype=dtype,
+            dtype=dtype,
+            param_dtype=param_dtype,
             embedding_init=embedding_init,
             rngs=rngs,
         )
@@ -44,7 +47,8 @@ class Model(nnx.Module):
             settings.hidden_features,
             settings.max_position_offset,
             embedding_scale,
-            dtype
+            dtype,
+            param_dtype
         )
 
         if settings.dropout_rate > 0.0:
@@ -61,20 +65,31 @@ class Model(nnx.Module):
                     mlp_activation=self.activation,
                     normalization=normalization,
                     dtype=dtype,
+                    param_dtype=param_dtype,
                     dropout_rate=settings.dropout_rate,
                     decode=False,
                     rngs=rngs,
                 )
             )
 
+        self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
         if settings.output.type == 'classification_tokens':
-            self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype)
             self.output_layer = nnx.LinearGeneral(
                 (settings.output.output_tokens, settings.hidden_features),
                 settings.output.output_classes if settings.output.format == 'softmax' else 1,
                 axis=(-2, -1),
                 kernel_init=kernel_init,
-                param_dtype=dtype,
+                dtype=dtype,
+                param_dtype=param_dtype,
+                rngs=rngs,
+            )
+        elif settings.output.type == 'mean' or settings.output.type == 'max':
+            self.output_layer = nnx.Linear(
+                settings.hidden_features,
+                settings.output.output_classes if settings.output.format == 'softmax' else 1,
+                kernel_init=kernel_init,
+                dtype=dtype,
+                param_dtype=param_dtype,
                 rngs=rngs,
             )
 
@@ -92,7 +107,7 @@ class Model(nnx.Module):
         x = self.token_embedding(inputs)
         x += self.position_embedding(batch_size, deterministic, rngs)
 
-        if self.dropout:
+        if hasattr(self, 'dropout'):
             x = self.dropout(x, deterministic=deterministic, rngs=rngs)
 
         mask = make_mask(inputs)
@@ -100,9 +115,17 @@ class Model(nnx.Module):
             x = transformer(x, mask, deterministic, rngs)
 
         # for classification tokens
-        x = x[..., 0: self.settings.output.output_tokens, :]
+        if self.settings.output.type == 'classification_tokens':
+            x = x[..., 0: self.settings.output.output_tokens, :]
+        elif self.settings.output.type == 'mean':
+            x = jnp.mean(x, axis=-2, where=(inputs != -1)[:, :, jnp.newaxis])
+        elif self.settings.output.type == 'max':
+            x = jnp.max(x, axis=-2, where=(inputs != -1)[:, :, jnp.newaxis], initial=-1000)
+
         x = self.output_norm(x)
         x = self.output_layer(x)
+
+        x = jnp.asarray(x, dtype=jnp.float32)
 
         return x
 
@@ -124,6 +147,8 @@ def activation_by_name(name: str) -> Callable[[Array], Array]:
             return nnx.relu
         case 'relu2':
             return relu2
+        case 'gelu':
+            return nnx.gelu
 
 
 def dtype_by_name(name: str):

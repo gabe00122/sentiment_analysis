@@ -31,7 +31,7 @@ def train(experiment: Experiment):
     set_flags()
 
     settings = experiment.settings
-    seed = random.PRNGKey(123)
+    seed = random.PRNGKey(settings.seed)
 
     init_key, train_key, training_shuffle_key, validation_shuffle_key = random.split(seed, num=4)
     init_rngs = nnx.Rngs(init_key)

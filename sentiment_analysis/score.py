@@ -2,6 +2,7 @@ from functools import partial
 from pathlib import Path
 from typing import NamedTuple
 import time
+import os
 
 import jax
 from flax import nnx
@@ -14,7 +15,12 @@ from sentiment_analysis.common.dataset_iterator import TrainingData
 
 
 def score():
-    path = Path("results/nano_2024-07-14_21-20-28")
+    os.environ['XLA_FLAGS'] = (
+        "--xla_gpu_enable_triton_softmax_fusion=true "
+        "--xla_gpu_triton_gemm_any=false "
+    )
+
+    path = Path("results/small_mixed_single_2024-07-18_13-20-12")
     settings = load_settings(path / "settings.json")
 
     data = jnp.load("./data/validation.npz")
@@ -28,7 +34,7 @@ def score():
     model = Model(settings.model, rngs=nnx.Rngs(0))
 
     checkpoints = Checkpointer(path / "checkpoints")
-    model = checkpoints.restore_latest(model)
+    model = checkpoints.restore(model, 49999)
 
     indices = jnp.arange(samples, dtype=jnp.uint32)
     batch = TrainingData(jnp.uint32(0), tokens, labels, indices)
