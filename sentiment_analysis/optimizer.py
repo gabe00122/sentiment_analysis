@@ -13,12 +13,15 @@ def create_optax_optimizer(settings: ExperimentSettings, total_steps: int) -> op
     )
 
     if settings.optimizer.weight_decay > 0:
-        return optax.adamw(
-            learning_rate,
-            b1=settings.optimizer.beta1,
-            b2=settings.optimizer.beta2,
-            eps=settings.optimizer.eps,
-            weight_decay=settings.optimizer.weight_decay
+        return optax.chain(
+            optax.clip(1.0),
+            optax.adamw(
+                learning_rate,
+                b1=settings.optimizer.beta1,
+                b2=settings.optimizer.beta2,
+                eps=settings.optimizer.eps,
+                weight_decay=settings.optimizer.weight_decay
+            )
         )
     else:
         return optax.adam(

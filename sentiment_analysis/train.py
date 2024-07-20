@@ -28,7 +28,7 @@ def set_flags():
 
 
 def train(experiment: Experiment):
-    set_flags()
+    # set_flags()
 
     settings = experiment.settings
     seed = random.PRNGKey(settings.seed)
@@ -53,7 +53,7 @@ def train(experiment: Experiment):
     print(f"Param Count: {count_params(optimizer.model)}")
 
     checkpoints = Checkpointer(experiment.checkpoint_path)
-    writer = TensorboardWriter(Path("./tensorboard"), experiment.run_name)
+    writer = TensorboardWriter(Path("./tensorboard_gen"), experiment.run_name)
 
     steps = samples // settings.batch_size
     total_steps = steps * settings.epochs
@@ -107,25 +107,14 @@ def train(experiment: Experiment):
 def classification_loss_fn(model, tokens, labels, rngs, training: bool):
     logit_pred = model(tokens, deterministic=not training, rngs=rngs)
 
-    loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logit_pred, labels))
+    logit_pred = logit_pred[:, :-1, :]
+    tokens = tokens[:, 1:]
+    # jax.debug.breakpoint()
 
-    predicted_labels = jnp.argmax(logit_pred, axis=-1)
-    percent_correct = jnp.mean(predicted_labels == labels, dtype=jnp.float32)
-    metrics = {"percent_correct": percent_correct, "loss": loss}
+    loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logit_pred, tokens), where=tokens != -1)
 
-    return loss, metrics
-
-
-def regressive_loss_fn(model, tokens, labels, rngs, training: bool):
-    class_scale = model.settings.output.output_classes
-
-    pred = nnx.sigmoid(jnp.squeeze(model(tokens, deterministic=not training, rngs=rngs)))
-
-    scaled_down_labels = (labels + 0.5) / class_scale
-    loss = jnp.mean((pred - scaled_down_labels) ** 2)
-
-    predicted_labels = jnp.floor(pred * class_scale)
-    percent_correct = jnp.mean(predicted_labels == labels, dtype=jnp.float32)
+    predicted_labels = jnp.argmax(logit_pred[labels], axis=-1)
+    percent_correct = jnp.mean(predicted_labels == tokens[labels], dtype=jnp.float32)
     metrics = {"percent_correct": percent_correct, "loss": loss}
 
     return loss, metrics
@@ -135,10 +124,7 @@ def regressive_loss_fn(model, tokens, labels, rngs, training: bool):
 def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, training_data: TrainingData, training: bool) -> tuple[TrainingData, Metrics]:
     training_data, tokens, labels = read_training_data(training_data, rngs.shuffle(), batch_size)
 
-    if optimizer.model.settings.output.format == 'regression':
-        loss_fn = regressive_loss_fn
-    else:
-        loss_fn = classification_loss_fn
+    loss_fn = classification_loss_fn
 
     if training:
         grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(optimizer.model, tokens, labels, rngs, training)

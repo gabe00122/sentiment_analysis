@@ -9,7 +9,8 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
     output_path = input_path.with_suffix(".npz")
 
     output_tokens = []
-    output_labels = []
+    #output_labels = []
+    output_length = []
 
     with open(input_path, 'r') as f:
         for i, line in enumerate(f):
@@ -17,11 +18,14 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
             text = data['text']
             label = data['label']
 
-            tokens = vocab.tokenize(text)
-            if len(tokens) <= max_length:
-                tokens = list(tokens) + ([-1] * (max_length - len(tokens)))
+            tokens = list(vocab.tokenize(text))
+            if len(tokens) < max_length:
+                tokens = [token + 5 for token in tokens] + [label]
+                token_length = len(tokens)
+
+                tokens = tokens + ([-1] * (max_length - token_length))
                 output_tokens.append(tokens)
-                output_labels.append(label - 1)
+                output_length.append(token_length)
 
             if i % 10_000 == 9_999:
                 total_reviews = len(output_tokens)
@@ -30,8 +34,8 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
 
     print(f"Saving {input_path.name}")
     np_tokens = np.array(output_tokens, np.int16)
-    np_labels = np.array(output_labels, np.int8)
-    np.savez_compressed(output_path, tokens=np_tokens, labels=np_labels)
+    np_length = np.array(output_length, np.uint8)
+    np.savez_compressed(output_path, tokens=np_tokens, length=np_length)
 
 
 def main():
@@ -43,7 +47,7 @@ def main():
     ]
 
     for p in paths:
-        pretokenize(p, vocab, 115)
+        pretokenize(p, vocab, 128)
 
 
 if __name__ == '__main__':

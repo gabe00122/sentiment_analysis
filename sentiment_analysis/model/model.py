@@ -1,6 +1,7 @@
 import math
 from typing import Callable
 
+import jax.debug
 from flax import nnx
 from jax import numpy as jnp, Array
 
@@ -27,11 +28,8 @@ class Model(nnx.Module):
         embedding_scale = math.sqrt(1.0 / settings.hidden_features)
         embedding_init = nnx.initializers.normal(embedding_scale)
 
-        vocab_size = settings.vocab.size
+        vocab_size = settings.vocab.size + 5
         context_size = settings.context_size
-        if settings.output.type == 'classification_tokens':
-            vocab_size += settings.output.output_tokens
-            context_size += settings.output.output_tokens
 
         self.token_embedding = nnx.Embed(
             vocab_size,
@@ -73,36 +71,17 @@ class Model(nnx.Module):
             )
 
         self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
-        if settings.output.type == 'classification_tokens':
-            self.output_layer = nnx.LinearGeneral(
-                (settings.output.output_tokens, settings.hidden_features),
-                settings.output.output_classes if settings.output.format == 'softmax' else 1,
-                axis=(-2, -1),
-                kernel_init=kernel_init,
-                dtype=dtype,
-                param_dtype=param_dtype,
-                rngs=rngs,
-            )
-        elif settings.output.type == 'mean' or settings.output.type == 'max':
-            self.output_layer = nnx.Linear(
-                settings.hidden_features,
-                settings.output.output_classes if settings.output.format == 'softmax' else 1,
-                kernel_init=kernel_init,
-                dtype=dtype,
-                param_dtype=param_dtype,
-                rngs=rngs,
-            )
+        self.output_layer = nnx.Linear(
+            settings.hidden_features,
+            vocab_size,
+            kernel_init=kernel_init,
+            dtype=dtype,
+            param_dtype=param_dtype,
+            rngs=rngs,
+        )
 
     def __call__(self, inputs, deterministic: bool, rngs: nnx.Rngs):
         batch_size = inputs.shape[0] if len(inputs.shape) > 1 else 0
-
-        if self.settings.output.type == 'classification_tokens':
-            inputs += self.settings.output.output_tokens
-            output_tokens = jnp.arange(self.settings.output.output_tokens, dtype=inputs.dtype)
-
-            if batch_size > 0:
-                output_tokens = jnp.tile(output_tokens, (batch_size, 1))
-            inputs = jnp.concatenate([output_tokens, inputs], axis=-1)
 
         x = self.token_embedding(inputs)
         x += self.position_embedding(batch_size, deterministic, rngs)
@@ -110,17 +89,12 @@ class Model(nnx.Module):
         if hasattr(self, 'dropout'):
             x = self.dropout(x, deterministic=deterministic, rngs=rngs)
 
-        mask = make_mask(inputs)
+        input_mask = make_mask(inputs)
+        casual_mask = nnx.make_causal_mask(inputs)
+        mask = nnx.combine_masks(input_mask, casual_mask)
+
         for transformer in self.transformer_layers:
             x = transformer(x, mask, deterministic, rngs)
-
-        # for classification tokens
-        if self.settings.output.type == 'classification_tokens':
-            x = x[..., 0: self.settings.output.output_tokens, :]
-        elif self.settings.output.type == 'mean':
-            x = jnp.mean(x, axis=-2, where=(inputs != -1)[:, :, jnp.newaxis])
-        elif self.settings.output.type == 'max':
-            x = jnp.max(x, axis=-2, where=(inputs != -1)[:, :, jnp.newaxis], initial=-1000)
 
         x = self.output_norm(x)
         x = self.output_layer(x)

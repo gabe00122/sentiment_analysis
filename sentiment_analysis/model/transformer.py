@@ -45,7 +45,7 @@ class TransformerLayer(nnx.Module):
 
         norm_x = self.norm(x)
 
-        a_x = self.attention(norm_x, mask=mask, deterministic=deterministic, rngs=rngs, sow_weights=True)
+        a_x = self.attention(norm_x, mask=mask, deterministic=deterministic, rngs=rngs)
         if hasattr(self, 'dropout'):
             a_x = self.dropout(a_x, deterministic=deterministic, rngs=rngs)
 

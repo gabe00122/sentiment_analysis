@@ -20,12 +20,12 @@ def score():
         "--xla_gpu_triton_gemm_any=false "
     )
 
-    path = Path("results/small_mixed_single_2024-07-18_13-20-12")
+    path = Path("results/small_mixed_single_2024-07-19_02-05-01")
     settings = load_settings(path / "settings.json")
 
     data = jnp.load("./data/validation.npz")
     tokens = data['tokens']
-    labels = data['labels']
+    labels = data['length']
 
     samples = tokens.shape[0]
     steps = samples // settings.batch_size
@@ -70,9 +70,12 @@ def eval_step(model, batch_size: int, batch: TrainingData, output: jax.Array) ->
     labels = batch.labels[indices]
 
     logit_pred = model(tokens, deterministic=True, rngs=None)
-    predicted_labels = jnp.argmax(logit_pred, axis=-1)
 
-    percent_correct = jnp.mean(predicted_labels == labels, dtype=jnp.float32)
+    logit_pred = logit_pred[:, :-1, :]
+    tokens = tokens[:, 1:]
+    predicted_labels = jnp.argmax(logit_pred[labels][:, :, :5], axis=-1)
+    percent_correct = jnp.mean(predicted_labels == tokens[labels], dtype=jnp.float32)
+
     output = output.at[step].set(percent_correct)
 
     batch = batch._replace(step=step+1)
