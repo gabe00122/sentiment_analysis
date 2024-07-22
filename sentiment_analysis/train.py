@@ -22,13 +22,13 @@ def count_params(model) -> int:
 
 def set_flags():
     os.environ['XLA_FLAGS'] = (
-        "--xla_gpu_enable_triton_softmax_fusion=true "
+        # "--xla_gpu_enable_triton_softmax_fusion=true "
         "--xla_gpu_triton_gemm_any=false "
     )
 
 
 def train(experiment: Experiment):
-    # set_flags()
+    set_flags()
 
     settings = experiment.settings
     seed = random.PRNGKey(settings.seed)
@@ -53,11 +53,18 @@ def train(experiment: Experiment):
     print(f"Param Count: {count_params(optimizer.model)}")
 
     checkpoints = Checkpointer(experiment.checkpoint_path)
+
+    # load model
+    # temp = Checkpointer("results/large_mixed_single_2024-07-21_22-01-39/checkpoints")
+    # optimizer.model = temp.restore_latest(optimizer.model)
+    # temp.close()
+    # del temp
+
     writer = TensorboardWriter(Path("./tensorboard_gen"), experiment.run_name)
 
     steps = samples // settings.batch_size
     total_steps = steps * settings.epochs
-    checkpoint_rate = 10_000
+    checkpoint_rate = 20_000
     validation_rate = 20
 
     for global_step in range(total_steps):
@@ -113,8 +120,8 @@ def classification_loss_fn(model, tokens, labels, rngs, training: bool):
 
     loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logit_pred, tokens), where=tokens != -1)
 
-    predicted_labels = jnp.argmax(logit_pred[labels], axis=-1)
-    percent_correct = jnp.mean(predicted_labels == tokens[labels], dtype=jnp.float32)
+    predicted_labels = jnp.argmax(logit_pred[labels - 2], axis=-1)
+    percent_correct = jnp.mean(predicted_labels == tokens[labels - 2], dtype=jnp.float32)
     metrics = {"percent_correct": percent_correct, "loss": loss}
 
     return loss, metrics

@@ -28,7 +28,7 @@ class Model(nnx.Module):
         embedding_scale = math.sqrt(1.0 / settings.hidden_features)
         embedding_init = nnx.initializers.normal(embedding_scale)
 
-        vocab_size = settings.vocab.size + 5
+        vocab_size = settings.vocab.size + 6
         context_size = settings.context_size
 
         self.token_embedding = nnx.Embed(
@@ -89,9 +89,9 @@ class Model(nnx.Module):
         if hasattr(self, 'dropout'):
             x = self.dropout(x, deterministic=deterministic, rngs=rngs)
 
-        input_mask = make_mask(inputs)
-        casual_mask = nnx.make_causal_mask(inputs)
-        mask = nnx.combine_masks(input_mask, casual_mask)
+        # input_mask = make_mask(inputs)
+        mask = nnx.make_causal_mask(inputs)
+        # mask = nnx.combine_masks(input_mask, casual_mask)
 
         for transformer in self.transformer_layers:
             x = transformer(x, mask, deterministic, rngs)

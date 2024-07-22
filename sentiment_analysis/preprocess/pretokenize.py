@@ -19,8 +19,8 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
             label = data['label']
 
             tokens = list(vocab.tokenize(text))
-            if len(tokens) < max_length:
-                tokens = [token + 5 for token in tokens] + [label]
+            if len(tokens) <= max_length - 2:
+                tokens = [token + 6 for token in tokens] + [0, label]
                 token_length = len(tokens)
 
                 tokens = tokens + ([-1] * (max_length - token_length))

@@ -7,14 +7,12 @@ from sentiment_analysis.model import Model
 
 
 def create_optax_optimizer(settings: ExperimentSettings, total_steps: int) -> optax.GradientTransformation:
-    min_rate = settings.optimizer.learning_rate / 10
-    learning_rate = optax.warmup_cosine_decay_schedule(
-        min_rate, settings.optimizer.learning_rate, settings.optimizer.warmup_steps, total_steps, min_rate
-    )
+    # min_rate = settings.optimizer.learning_rate / 10
+    learning_rate = optax.linear_onecycle_schedule(total_steps, settings.optimizer.learning_rate)
 
     if settings.optimizer.weight_decay > 0:
         return optax.chain(
-            optax.clip(1.0),
+            optax.clip(0.5),
             optax.adamw(
                 learning_rate,
                 b1=settings.optimizer.beta1,
