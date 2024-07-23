@@ -65,10 +65,10 @@ def train(experiment: Experiment):
     steps = samples // settings.batch_size
     total_steps = steps * settings.epochs
     checkpoint_rate = 20_000
-    validation_rate = 20
+    validation_rate = settings.batch_per_call
 
+    start_time = time.time()
     for global_step in range(total_steps):
-        start_time = time.time()
         training_data, metrics = train_step(optimizer, rngs, settings.batch_size, training_data, True)
 
         if global_step % validation_rate == validation_rate - 1:
@@ -79,19 +79,20 @@ def train(experiment: Experiment):
             val_correct = val_metrics["percent_correct"].item() * 100
             print(f"validation loss = {val_loss:.4f}, validation correct = {val_correct:.1f}%")
 
-        writer.write(metrics, global_step, "training")
+            writer.write(metrics, global_step, "training")
 
-        loss = metrics["loss"].item()
-        percent_correct = metrics["percent_correct"].item() * 100
+            loss = metrics["loss"].item()
+            percent_correct = metrics["percent_correct"].item() * 100
 
-        end_time = time.time()
-        delta_time = end_time - start_time
-        samples_per_second = settings.batch_size / delta_time
+            end_time = time.time()
+            delta_time = end_time - start_time
+            samples_per_second = settings.model.context_size * ((settings.batch_size / delta_time) * validation_rate)
 
-        epoch = global_step // steps
-        step = global_step % steps
+            epoch = global_step // steps
+            step = global_step % steps
 
-        print(f"epoch = {epoch}/{settings.epochs}, step = {step}/{steps}, loss = {loss:.4f}, correct = {percent_correct:.1f}%, perf = {samples_per_second:.2f}")
+            print(f"epoch = {epoch}/{settings.epochs}, step = {step}/{steps}, loss = {loss:.4f}, correct = {percent_correct:.1f}%, perf = {samples_per_second:.2f}")
+            start_time = time.time()
 
         if global_step % checkpoint_rate == checkpoint_rate - 1:
             print("Saving checkpoint")

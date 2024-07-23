@@ -42,7 +42,7 @@ class PositionalEmbeddings(nnx.Module):
         self.dtype = dtype
         self.max_offset = max_offset
         self.context_size = context_size
-        self.embedding = nnx.Param(
+        self.embedding = nnx.Variable(
             get_positional_embeddings(
                 context_size + max_offset, embedding_features, dtype=param_dtype
             )

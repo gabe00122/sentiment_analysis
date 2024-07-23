@@ -50,7 +50,9 @@ class TransformerLayer(nnx.Module):
             a_x = self.dropout(a_x, deterministic=deterministic, rngs=rngs)
 
         ff_x = self.ff_block(norm_x, deterministic, rngs)
+        # todo add dropout here for feed forward
 
+        # todo try post layer norm again
         x += a_x + ff_x
 
         return x

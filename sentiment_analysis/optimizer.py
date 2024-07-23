@@ -6,21 +6,23 @@ from sentiment_analysis.common.dataset_iterator import TrainingData
 from sentiment_analysis.model import Model
 
 
-def create_optax_optimizer(settings: ExperimentSettings, total_steps: int) -> optax.GradientTransformation:
+def create_optax_optimizer(settings: ExperimentSettings, total_steps: int):
     # min_rate = settings.optimizer.learning_rate / 10
-    learning_rate = optax.linear_onecycle_schedule(total_steps, settings.optimizer.learning_rate)
+    every_k_schedule = settings.batch_per_call
+    learning_rate = optax.linear_onecycle_schedule(total_steps // every_k_schedule, settings.optimizer.learning_rate)
 
     if settings.optimizer.weight_decay > 0:
-        return optax.chain(
-            optax.clip(0.5),
-            optax.adamw(
-                learning_rate,
-                b1=settings.optimizer.beta1,
-                b2=settings.optimizer.beta2,
-                eps=settings.optimizer.eps,
-                weight_decay=settings.optimizer.weight_decay
-            )
-        )
+        return optax.MultiSteps(
+            optax.chain(
+                optax.clip(1.0),
+                optax.adamw(
+                    learning_rate,
+                    b1=settings.optimizer.beta1,
+                    b2=settings.optimizer.beta2,
+                    eps=settings.optimizer.eps,
+                    weight_decay=settings.optimizer.weight_decay
+                )
+            ), every_k_schedule=every_k_schedule)
     else:
         return optax.adam(
             learning_rate,

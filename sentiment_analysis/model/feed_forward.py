@@ -40,7 +40,6 @@ class GLUFeedForwardBlock(nnx.Module):
             a_x = self.dropout(a_x, deterministic=deterministic, rngs=rngs)
             g_x = self.dropout(g_x, deterministic=deterministic, rngs=rngs)
 
-
         a_x = self.activation(a_x)
         x = a_x * g_x
 

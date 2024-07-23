@@ -50,7 +50,8 @@ class Model(nnx.Module):
         )
 
         if settings.dropout_rate > 0.0:
-            self.dropout = nnx.Dropout(settings.dropout_rate)
+            self.embedding_dropout = nnx.Dropout(settings.dropout_rate)
+            self.position_dropout = nnx.Dropout(settings.dropout_rate)
 
         self.transformer_layers = []
         for i in range(settings.transformer_layers):
@@ -70,6 +71,7 @@ class Model(nnx.Module):
                 )
             )
 
+        #self.embedding_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
         self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
         self.output_layer = nnx.Linear(
             settings.hidden_features,
@@ -83,11 +85,15 @@ class Model(nnx.Module):
     def __call__(self, inputs, deterministic: bool, rngs: nnx.Rngs):
         batch_size = inputs.shape[0] if len(inputs.shape) > 1 else 0
 
-        x = self.token_embedding(inputs)
-        x += self.position_embedding(batch_size, deterministic, rngs)
+        token_x = self.token_embedding(inputs)
+        position_x = self.position_embedding(batch_size, deterministic, rngs)
 
         if hasattr(self, 'dropout'):
-            x = self.dropout(x, deterministic=deterministic, rngs=rngs)
+            token_x = self.embedding_dropout(token_x, deterministic=deterministic, rngs=rngs)
+            position_x = self.position_dropout(position_x, deterministic=deterministic, rngs=rngs)
+
+        x = token_x + position_x
+        #x = self.embedding_norm(x)
 
         # input_mask = make_mask(inputs)
         mask = nnx.make_causal_mask(inputs)
