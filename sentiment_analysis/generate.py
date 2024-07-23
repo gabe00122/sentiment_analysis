@@ -16,7 +16,7 @@ def count_params(model) -> int:
 
 
 def main():
-    path = Path("results/large_mixed_single_2024-07-22_09-00-53")
+    path = Path("results/small_genrative_2024-07-22_21-39-51")
     settings = load_settings(path / "settings.json")
     checkpointer = Checkpointer(path / "checkpoints")
 
@@ -27,8 +27,8 @@ def main():
     @nnx.jit
     def inference(tokens, i, rng_key):
         predictions =  model(tokens, True, nnx.Rngs(0))[i - 1]
-        values, indices = jax.lax.top_k(predictions, 50)
-        pred_token = random.categorical(rng_key, values / 0.4)
+        values, indices = jax.lax.top_k(predictions, 1000)
+        pred_token = random.categorical(rng_key, values / 0.6)
         return indices[pred_token]
 
 

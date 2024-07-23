@@ -49,9 +49,9 @@ class Model(nnx.Module):
             param_dtype
         )
 
-        if settings.dropout_rate > 0.0:
-            self.embedding_dropout = nnx.Dropout(settings.dropout_rate)
-            self.position_dropout = nnx.Dropout(settings.dropout_rate)
+        # if settings.dropout_rate > 0.0:
+        #     self.embedding_dropout = nnx.Dropout(settings.dropout_rate)
+        #     self.position_dropout = nnx.Dropout(settings.dropout_rate)
 
         self.transformer_layers = []
         for i in range(settings.transformer_layers):
@@ -88,9 +88,9 @@ class Model(nnx.Module):
         token_x = self.token_embedding(inputs)
         position_x = self.position_embedding(batch_size, deterministic, rngs)
 
-        if hasattr(self, 'dropout'):
-            token_x = self.embedding_dropout(token_x, deterministic=deterministic, rngs=rngs)
-            position_x = self.position_dropout(position_x, deterministic=deterministic, rngs=rngs)
+        #if hasattr(self, 'dropout'):
+            #token_x = self.embedding_dropout(token_x, deterministic=deterministic, rngs=rngs)
+            #position_x = self.position_dropout(position_x, deterministic=deterministic, rngs=rngs)
 
         x = token_x + position_x
         #x = self.embedding_norm(x)
