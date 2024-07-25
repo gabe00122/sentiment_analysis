@@ -30,6 +30,7 @@ class GLUFeedForwardBlock(nnx.Module):
                                       param_dtype=param_dtype, rngs=rngs)
         self.activation = activation
         if dropout_rate > 0.0:
+            self.gate_dropout = nnx.Dropout(dropout_rate)
             self.dropout = nnx.Dropout(dropout_rate)
 
     def __call__(self, x, deterministic: bool, rngs: nnx.Rngs):
@@ -38,7 +39,8 @@ class GLUFeedForwardBlock(nnx.Module):
 
         if hasattr(self, 'dropout'):
             a_x = self.dropout(a_x, deterministic=deterministic, rngs=rngs)
-            g_x = self.dropout(g_x, deterministic=deterministic, rngs=rngs)
+        if hasattr(self, 'gate_dropout'):
+            g_x = self.gate_dropout(g_x, deterministic=deterministic, rngs=rngs)
 
         a_x = self.activation(a_x)
         x = a_x * g_x

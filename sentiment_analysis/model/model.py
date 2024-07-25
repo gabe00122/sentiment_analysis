@@ -6,7 +6,7 @@ from flax import nnx
 from jax import numpy as jnp, Array
 
 from sentiment_analysis.model.types import ModelSettings
-from sentiment_analysis.model.embeddings import PositionalEmbeddings
+from sentiment_analysis.model.embeddings import PositionalEmbeddings, Embedder
 from sentiment_analysis.model.transformer import TransformerLayer
 
 
@@ -25,33 +25,19 @@ class Model(nnx.Module):
         normalization = norm_by_name(self.settings.normalization)
         kernel_init = nnx.initializers.glorot_normal()
 
-        embedding_scale = math.sqrt(1.0 / settings.hidden_features)
-        embedding_init = nnx.initializers.normal(embedding_scale)
-
         vocab_size = settings.vocab.size + 6
         context_size = settings.context_size
 
-        self.token_embedding = nnx.Embed(
-            vocab_size,
-            settings.hidden_features,
-            dtype=dtype,
-            param_dtype=param_dtype,
-            embedding_init=embedding_init,
-            rngs=rngs,
-        )
+        self.token_embedding = Embedder(vocab_size, settings.hidden_features, dtype, param_dtype, rngs)
 
         self.position_embedding = PositionalEmbeddings(
             context_size,
             settings.hidden_features,
             settings.max_position_offset,
-            embedding_scale,
+            0.05,
             dtype,
             param_dtype
         )
-
-        # if settings.dropout_rate > 0.0:
-        #     self.embedding_dropout = nnx.Dropout(settings.dropout_rate)
-        #     self.position_dropout = nnx.Dropout(settings.dropout_rate)
 
         self.transformer_layers = []
         for i in range(settings.transformer_layers):
@@ -71,39 +57,23 @@ class Model(nnx.Module):
                 )
             )
 
-        #self.embedding_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
         self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
-        self.output_layer = nnx.Linear(
-            settings.hidden_features,
-            vocab_size,
-            kernel_init=kernel_init,
-            dtype=dtype,
-            param_dtype=param_dtype,
-            rngs=rngs,
-        )
 
     def __call__(self, inputs, deterministic: bool, rngs: nnx.Rngs):
         batch_size = inputs.shape[0] if len(inputs.shape) > 1 else 0
 
-        token_x = self.token_embedding(inputs)
-        position_x = self.position_embedding(batch_size, deterministic, rngs)
+        token_embed = self.token_embedding.encode(inputs)
+        position_embed = self.position_embedding(batch_size, deterministic, rngs)
 
-        #if hasattr(self, 'dropout'):
-            #token_x = self.embedding_dropout(token_x, deterministic=deterministic, rngs=rngs)
-            #position_x = self.position_dropout(position_x, deterministic=deterministic, rngs=rngs)
+        x = token_embed + position_embed
 
-        x = token_x + position_x
-        #x = self.embedding_norm(x)
-
-        # input_mask = make_mask(inputs)
         mask = nnx.make_causal_mask(inputs)
-        # mask = nnx.combine_masks(input_mask, casual_mask)
 
         for transformer in self.transformer_layers:
             x = transformer(x, mask, deterministic, rngs)
 
         x = self.output_norm(x)
-        x = self.output_layer(x)
+        x = self.token_embedding.decode(x)
 
         x = jnp.asarray(x, dtype=jnp.float32)
 

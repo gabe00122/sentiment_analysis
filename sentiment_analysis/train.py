@@ -64,7 +64,7 @@ def train(experiment: Experiment):
 
     steps = samples // settings.batch_size
     total_steps = steps * settings.epochs
-    checkpoint_rate = 20_000
+    checkpoint_rate = 100_000
     validation_rate = settings.batch_per_call
 
     start_time = time.time()
@@ -112,17 +112,21 @@ def train(experiment: Experiment):
     print("Experiment complete 🎉")
 
 
-def classification_loss_fn(model, tokens, labels, rngs, training: bool):
+def autoregressive_loss(model, tokens, labels, rngs, training: bool):
     logit_pred = model(tokens, deterministic=not training, rngs=rngs)
 
     logit_pred = logit_pred[:, :-1, :]
     tokens = tokens[:, 1:]
-    # jax.debug.breakpoint()
 
     loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logit_pred, tokens), where=tokens != -1)
 
-    predicted_labels = jnp.argmax(logit_pred[labels - 2], axis=-1)
-    percent_correct = jnp.mean(predicted_labels == tokens[labels - 2], dtype=jnp.float32)
+    batch_index = jnp.arange(tokens.shape[0])
+    star_logits = logit_pred[batch_index, labels - 2, 1:6]
+    star_labels = tokens[batch_index, labels - 2] - 1
+
+    predicted_stars = jnp.argmax(star_logits, axis=-1) # limit it to valid star ratings
+    percent_correct = jnp.mean(predicted_stars == star_labels, dtype=jnp.float32)
+    # jax.debug.breakpoint()
     metrics = {"percent_correct": percent_correct, "loss": loss}
 
     return loss, metrics
@@ -132,7 +136,7 @@ def classification_loss_fn(model, tokens, labels, rngs, training: bool):
 def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, training_data: TrainingData, training: bool) -> tuple[TrainingData, Metrics]:
     training_data, tokens, labels = read_training_data(training_data, rngs.shuffle(), batch_size)
 
-    loss_fn = classification_loss_fn
+    loss_fn = autoregressive_loss
 
     if training:
         grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(optimizer.model, tokens, labels, rngs, training)
