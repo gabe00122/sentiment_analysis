@@ -16,20 +16,32 @@ def count_params(model) -> int:
 
 
 def main():
-    path = Path("results/small_genrative_2024-07-22_21-39-51")
+    path = Path("results/small_genrative_2024-07-23_23-37-39")
     settings = load_settings(path / "settings.json")
     checkpointer = Checkpointer(path / "checkpoints")
 
     model = Model(settings.model, nnx.Rngs(0))
-    model = checkpointer.restore_latest(model)
+    model = checkpointer.restore(model, 399999)
     print(count_params(model))
 
     @nnx.jit
     def inference(tokens, i, rng_key):
-        predictions =  model(tokens, True, nnx.Rngs(0))[i - 1]
-        values, indices = jax.lax.top_k(predictions, 1000)
-        pred_token = random.categorical(rng_key, values / 0.6)
-        return indices[pred_token]
+        temp = 0.7
+        top_k = 50
+        top_p = 0.90
+
+        logits =  model(tokens, True, nnx.Rngs(0))[i - 1]
+        logits /= temp
+        probs = nnx.softmax(logits)
+
+        top_k_logits, top_k_indices = jax.lax.top_k(logits, top_k)
+        top_p_probs = probs[top_k_indices]
+
+        cumsum_top_p = jnp.cumsum(top_p_probs) - top_p_probs
+        top_k_logits = jnp.where(cumsum_top_p < top_p, top_k_logits, -jnp.inf)
+
+        sample_index = random.categorical(rng_key, top_k_logits)
+        return top_k_indices[sample_index]
 
 
     vocab = Vocab(settings.model.vocab.path)

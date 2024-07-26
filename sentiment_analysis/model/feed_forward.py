@@ -29,21 +29,13 @@ class GLUFeedForwardBlock(nnx.Module):
         self.down_linear = nnx.Linear(hidden_features, in_features, kernel_init=kernel_init, dtype=dtype,
                                       param_dtype=param_dtype, rngs=rngs)
         self.activation = activation
-        if dropout_rate > 0.0:
-            self.gate_dropout = nnx.Dropout(dropout_rate)
-            self.dropout = nnx.Dropout(dropout_rate)
 
     def __call__(self, x, deterministic: bool, rngs: nnx.Rngs):
-        a_x = self.activation_linear(x)
-        g_x = self.gate_linear(x)
+        activation_x = self.activation_linear(x)
+        gate_x = self.gate_linear(x)
 
-        if hasattr(self, 'dropout'):
-            a_x = self.dropout(a_x, deterministic=deterministic, rngs=rngs)
-        if hasattr(self, 'gate_dropout'):
-            g_x = self.gate_dropout(g_x, deterministic=deterministic, rngs=rngs)
+        activation_x = self.activation(activation_x)
 
-        a_x = self.activation(a_x)
-        x = a_x * g_x
-
+        x = activation_x * gate_x
         x = self.down_linear(x)
         return x

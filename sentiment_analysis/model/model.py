@@ -57,6 +57,7 @@ class Model(nnx.Module):
                 )
             )
 
+        #self.input_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
         self.output_norm = normalization(settings.hidden_features, rngs=rngs, dtype=dtype, param_dtype=param_dtype)
 
     def __call__(self, inputs, deterministic: bool, rngs: nnx.Rngs):
@@ -66,6 +67,7 @@ class Model(nnx.Module):
         position_embed = self.position_embedding(batch_size, deterministic, rngs)
 
         x = token_embed + position_embed
+        #x = self.input_norm(x)
 
         mask = nnx.make_causal_mask(inputs)
 

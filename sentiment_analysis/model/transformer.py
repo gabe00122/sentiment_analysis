@@ -22,7 +22,7 @@ class TransformerLayer(nnx.Module):
         rngs: nnx.Rngs,
     ):
         self.norm = normalization(features, dtype=dtype, rngs=rngs)
-        # self.out_norm = normalization(features, dtype=dtype, rngs=rngs)
+        #self.post_norm = normalization(features, dtype=dtype, rngs=rngs)
 
         if dropout_rate > 0.0:
             self.dropout = nnx.Dropout(dropout_rate)
@@ -38,7 +38,7 @@ class TransformerLayer(nnx.Module):
             param_dtype=param_dtype,
             # normalize_qk=True,
             rngs=rngs,
-            # use_bias=False
+            #use_bias=False
         )
 
         self.ff_block = GLUFeedForwardBlock(features, mlp_features, mlp_activation, kernel_init, dtype, param_dtype, dropout_rate, rngs)
@@ -56,6 +56,9 @@ class TransformerLayer(nnx.Module):
         if hasattr(self, 'ff_dropout'):
             ff_x = self.ff_dropout(ff_x, deterministic=deterministic, rngs=rngs)
 
-        x += a_x + ff_x
+        combined = a_x + ff_x
+        #combined = self.post_norm(combined)
+
+        x += combined
 
         return x
