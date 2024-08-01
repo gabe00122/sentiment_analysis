@@ -108,7 +108,7 @@ class ResidualBlock(nnx.Module):
         return inputs + self.block(self.norm(inputs), *args, **kwargs)
 
 
-ActivationName = typing.Literal["relu", "swish", "gelu"]
+ActivationName = typing.Literal["relu", "silu", "gelu", "mish"]
 
 
 def get_activation(name: ActivationName):
@@ -226,49 +226,3 @@ class TransformerModel(nnx.Module):
         x = jnp.asarray(x, dtype=jnp.float32)
 
         return x
-
-
-def call(graph, state, inputs, segment_positions):
-    model = nnx.merge(graph, state)
-    return model(inputs, segment_positions)
-
-
-def call_jaxpr(model, inputs, segment_positions):
-    graph, state = nnx.split(model)
-    return jax.make_jaxpr(call, static_argnums=0)(
-        graph, state, inputs, segment_positions
-    )
-
-
-def main():
-    rngs = nnx.Rngs(0)
-    num_heads = 2
-    d_model = 16
-
-    attention = TransformerModel(
-        vocab_size=10,
-        num_layers=2,
-        num_heads=num_heads,
-        d_model=d_model,
-        ffn_size=d_model * 2,
-        dtype="bfloat16",
-        param_dtype="float32",
-        rngs=rngs,
-    )
-    inputs = jnp.ones(
-        (
-            2,
-            16,
-        ),
-        dtype=jnp.int16,
-    )
-    segment_positions = jnp.arange(16, dtype=jnp.int16)
-
-    print(call_jaxpr(attention, inputs, segment_positions))
-
-    graph, state = nnx.split(attention)
-    print(call(graph, state, inputs, segment_positions))
-
-
-if __name__ == "__main__":
-    main()

@@ -39,12 +39,6 @@ def train(experiment: Experiment):
     samples = training_data.tokens.shape[0]
     context_size = training_data.tokens.shape[-1]
 
-    if context_size != settings.model.context_size:
-        print(
-            f"Model context size {settings.model.context_size} and data context size {context_size} don't match"
-        )
-        return
-
     print(f"Total Samples: {samples}")
 
     optimizer = create_optimizer(settings, init_rngs, training_data)
@@ -84,7 +78,7 @@ def train(experiment: Experiment):
 
             end_time = time.time()
             delta_time = end_time - start_time
-            samples_per_second = settings.model.context_size * (
+            samples_per_second = context_size * (
                 (settings.batch_size / delta_time) * validation_rate
             )
 

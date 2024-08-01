@@ -3,7 +3,6 @@ from flax import nnx
 
 from sentiment_analysis.types import ExperimentSettings
 from sentiment_analysis.common.dataset_iterator import TrainingData
-from sentiment_analysis.model import Model
 
 
 def create_optax_optimizer(settings: ExperimentSettings, total_steps: int):
@@ -38,7 +37,7 @@ def create_optax_optimizer(settings: ExperimentSettings, total_steps: int):
 def create_optimizer(
     settings: ExperimentSettings, rngs: nnx.Rngs, training_data: TrainingData
 ) -> nnx.Optimizer:
-    model = Model(settings.model, rngs)
+    model = settings.model.create_model(settings.vocab.size, rngs)
     total_steps = (
         training_data.tokens.shape[0] // settings.batch_size
     ) * settings.epochs
