@@ -5,7 +5,7 @@ from pydantic.dataclasses import dataclass
 
 @dataclass(frozen=True)
 class OptimizerSettings:
-    type: Literal['adamw']
+    type: Literal["adamw"]
     learning_rate: float
     warmup_steps: int
     weight_decay: float
@@ -16,7 +16,7 @@ class OptimizerSettings:
 
 @dataclass(frozen=True)
 class ExperimentSettings:
-    seed: int | Literal['random']
+    seed: int | Literal["random"]
     training_file: str
     validation_file: str
     epochs: int

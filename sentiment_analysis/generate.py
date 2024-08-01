@@ -73,7 +73,5 @@ def main():
             print("\nStars: " + str(stars.item()))
 
 
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

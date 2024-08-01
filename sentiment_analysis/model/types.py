@@ -5,6 +5,6 @@ from pydantic.dataclasses import dataclass
 
 @dataclass(frozen=True)
 class VocabSettings:
-    type: Literal['token_monster']
+    type: Literal["token_monster"]
     path: str
     size: int

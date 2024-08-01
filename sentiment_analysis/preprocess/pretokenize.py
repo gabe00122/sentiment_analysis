@@ -9,14 +9,14 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
     output_path = input_path.with_suffix(".npz")
 
     output_tokens = []
-    #output_labels = []
+    # output_labels = []
     output_length = []
 
-    with open(input_path, 'r') as f:
+    with open(input_path, "r") as f:
         for i, line in enumerate(f):
             data = json.loads(line)
-            text = data['text']
-            label = data['label']
+            text = data["text"]
+            label = data["label"]
 
             tokens = list(vocab.tokenize(text))
             if len(tokens) <= max_length - 2:
@@ -40,15 +40,11 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
 
 def main():
     vocab = tokenmonster.load("./vocab/yelp-32000-consistent-oneword-v1.vocab")
-    paths = [
-        "./data/test.json",
-        "./data/training.json",
-        "./data/validation.json"
-    ]
+    paths = ["./data/test.json", "./data/training.json", "./data/validation.json"]
 
     for p in paths:
         pretokenize(p, vocab, 128)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

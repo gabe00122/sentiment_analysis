@@ -5,10 +5,7 @@ from sentiment_analysis.train import train
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        prog="Train",
-        description=""
-    )
+    parser = argparse.ArgumentParser(prog="Train", description="")
 
     parser.add_argument("-s", "--settings", required=True)
     args = parser.parse_args()
@@ -17,5 +14,5 @@ def main():
     train(settings)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

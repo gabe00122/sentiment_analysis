@@ -16,10 +16,7 @@ def create_tokenizer_corpus(data_path: Path, config: TokenizerCorpusConfig):
     def print_stats():
         print(f"sentence_count = {sentence_count}")
 
-    with (
-        open(data_path, "r") as data_file,
-        open("./data/corpus.txt", "w") as corpus
-    ):
+    with open(data_path, "r") as data_file, open("./data/corpus.txt", "w") as corpus:
         for i, line in enumerate(data_file):
             data = json.loads(line)
             text = data["text"]

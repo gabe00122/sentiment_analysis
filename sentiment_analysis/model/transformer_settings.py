@@ -14,8 +14,8 @@ class ModelSettings:
     ffn_size: int
     activation_name: ActivationName
     glu: bool
-    dtype: Literal['float32', 'bfloat16']
-    param_dtype: Literal['float32', 'bfloat16']
+    dtype: Literal["float32", "bfloat16"]
+    param_dtype: Literal["float32", "bfloat16"]
 
     def create_model(self, vocab_size: int, rngs: nnx.Rngs) -> TransformerModel:
         return TransformerModel(
@@ -28,5 +28,5 @@ class ModelSettings:
             dtype=self.dtype,
             param_dtype=self.param_dtype,
             glu=self.glu,
-            rngs=rngs
+            rngs=rngs,
         )

@@ -5,13 +5,24 @@ from jax.typing import DTypeLike
 
 
 class Embedder(nnx.Module):
-    def __init__(self, vocab_size: int, embedding_features: int, *, dtype: DTypeLike, param_dtype: DTypeLike, rngs: nnx.Rngs):
+    def __init__(
+        self,
+        vocab_size: int,
+        embedding_features: int,
+        *,
+        dtype: DTypeLike,
+        param_dtype: DTypeLike,
+        rngs: nnx.Rngs
+    ):
         self.dtype = dtype
         self.embedding_features = embedding_features
         self.param_dtype = param_dtype
 
         key = rngs.param()
-        self.embedding_table = nnx.Param(random.normal(key, (vocab_size, embedding_features)) * 0.01, dtype=param_dtype)
+        self.embedding_table = nnx.Param(
+            random.normal(key, (vocab_size, embedding_features)) * 0.01,
+            dtype=param_dtype,
+        )
 
     def encode(self, x: jax.Array):
         x = jnp.take(self.embedding_table.value, x, axis=0)

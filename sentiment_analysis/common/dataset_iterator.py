@@ -15,12 +15,18 @@ def reset_batch(batch: TrainingData, rng_key):
     return batch._replace(step=jnp.uint32(0), indices=indices)
 
 
-def read_training_data(batch: TrainingData, rng_key, batch_size: int) -> tuple[TrainingData, jax.Array, jax.Array]:
+def read_training_data(
+    batch: TrainingData, rng_key, batch_size: int
+) -> tuple[TrainingData, jax.Array, jax.Array]:
     steps = batch.indices.shape[0] // batch_size
 
-    batch = jax.lax.cond(batch.step >= steps, lambda: reset_batch(batch, rng_key), lambda: batch)
+    batch = jax.lax.cond(
+        batch.step >= steps, lambda: reset_batch(batch, rng_key), lambda: batch
+    )
 
-    indices = jax.lax.dynamic_slice(batch.indices, (batch_size * batch.step,), (batch_size,))
+    indices = jax.lax.dynamic_slice(
+        batch.indices, (batch_size * batch.step,), (batch_size,)
+    )
     tokens = batch.tokens[indices]
     lengths = batch.lengths[indices]
     batch = batch._replace(step=batch.step + 1)
@@ -28,7 +34,9 @@ def read_training_data(batch: TrainingData, rng_key, batch_size: int) -> tuple[T
     return batch, tokens, lengths
 
 
-def create_training_data(tokens: jax.Array, lengths: jax.Array, shuffle_key) -> TrainingData:
+def create_training_data(
+    tokens: jax.Array, lengths: jax.Array, shuffle_key
+) -> TrainingData:
     indices = jnp.arange(tokens.shape[0], dtype=jnp.uint32)
     indices = random.permutation(shuffle_key, indices)
 
@@ -37,7 +45,7 @@ def create_training_data(tokens: jax.Array, lengths: jax.Array, shuffle_key) -> 
 
 def load_training_data(path: str, shuffle_key) -> TrainingData:
     data = jnp.load(path)
-    tokens = data['tokens']
-    lengths = data['length']
+    tokens = data["tokens"]
+    lengths = data["length"]
 
     return create_training_data(tokens, lengths, shuffle_key)

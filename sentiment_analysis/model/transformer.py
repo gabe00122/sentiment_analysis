@@ -235,7 +235,9 @@ def call(graph, state, inputs, segment_positions):
 
 def call_jaxpr(model, inputs, segment_positions):
     graph, state = nnx.split(model)
-    return jax.make_jaxpr(call, static_argnums=0)(graph, state, inputs, segment_positions)
+    return jax.make_jaxpr(call, static_argnums=0)(
+        graph, state, inputs, segment_positions
+    )
 
 
 def main():
@@ -253,7 +255,13 @@ def main():
         param_dtype="float32",
         rngs=rngs,
     )
-    inputs = jnp.ones((2, 16,), dtype=jnp.int16)
+    inputs = jnp.ones(
+        (
+            2,
+            16,
+        ),
+        dtype=jnp.int16,
+    )
     segment_positions = jnp.arange(16, dtype=jnp.int16)
 
     print(call_jaxpr(attention, inputs, segment_positions))
