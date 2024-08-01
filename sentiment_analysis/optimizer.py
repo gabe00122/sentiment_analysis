@@ -7,8 +7,7 @@ from sentiment_analysis.model import Model
 
 
 def create_optax_optimizer(settings: ExperimentSettings, total_steps: int):
-    # min_rate = settings.optimizer.learning_rate / 10
-    every_k_schedule = settings.batch_per_call
+    every_k_schedule = settings.accumulation_steps
     learning_rate = optax.linear_onecycle_schedule(total_steps // every_k_schedule, settings.optimizer.learning_rate)
 
     if settings.optimizer.weight_decay > 0:

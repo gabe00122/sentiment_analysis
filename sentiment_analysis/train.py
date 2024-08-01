@@ -1,30 +1,18 @@
-import os
 import time
 from functools import partial
 from pathlib import Path
 
+import numpy as np
 import optax
 from flax import nnx
-import jax
 from jax import numpy as jnp, random
-import numpy as np
 
 from sentiment_analysis.common.checkpointer import Checkpointer
 from sentiment_analysis.common.dataset_iterator import read_training_data, TrainingData, load_training_data
 from sentiment_analysis.common.metrics import TensorboardWriter, Metrics
 from sentiment_analysis.experiment import Experiment
 from sentiment_analysis.optimizer import create_optimizer
-
-
-def count_params(model) -> int:
-    params = nnx.state(model, nnx.Param)
-    return sum(x.size for x in jax.tree_util.tree_leaves(params))
-
-def set_flags():
-    os.environ['XLA_FLAGS'] = (
-        # "--xla_gpu_enable_triton_softmax_fusion=true "
-        "--xla_gpu_triton_gemm_any=false "
-    )
+from sentiment_analysis.util import set_flags, count_params
 
 
 def train(experiment: Experiment):
@@ -54,18 +42,12 @@ def train(experiment: Experiment):
 
     checkpoints = Checkpointer(experiment.checkpoint_path)
 
-    # load model
-    # temp = Checkpointer("results/large_mixed_single_2024-07-21_22-01-39/checkpoints")
-    # optimizer.model = temp.restore_latest(optimizer.model)
-    # temp.close()
-    # del temp
-
-    writer = TensorboardWriter(Path("./tensorboard_gen"), experiment.run_name)
+    writer = TensorboardWriter(Path("./tensorboard"), experiment.run_name)
 
     steps = samples // settings.batch_size
     total_steps = steps * settings.epochs
     checkpoint_rate = 100_000
-    validation_rate = settings.batch_per_call
+    validation_rate = settings.accumulation_steps
 
     start_time = time.time()
     for global_step in range(total_steps):
@@ -112,8 +94,9 @@ def train(experiment: Experiment):
     print("Experiment complete 🎉")
 
 
-def autoregressive_loss(model, tokens, labels, rngs, training: bool):
-    logit_pred = model(tokens, deterministic=not training, rngs=rngs)
+def autoregressive_loss(model, tokens, lengths):
+    segment_position = jnp.arange(tokens.shape[-1])
+    logit_pred = model(tokens, segment_position)
 
     logit_pred = logit_pred[:, :-1, :]
     tokens = tokens[:, 1:]
@@ -121,10 +104,10 @@ def autoregressive_loss(model, tokens, labels, rngs, training: bool):
     loss = jnp.mean(optax.softmax_cross_entropy_with_integer_labels(logit_pred, tokens), where=tokens != -1)
 
     batch_index = jnp.arange(tokens.shape[0])
-    star_logits = logit_pred[batch_index, labels - 2, 1:6]
-    star_labels = tokens[batch_index, labels - 2] - 1
+    star_logits = logit_pred[batch_index, lengths - 2, 1:6]
+    star_labels = tokens[batch_index, lengths - 2] - 1
 
-    predicted_stars = jnp.argmax(star_logits, axis=-1) # limit it to valid star ratings
+    predicted_stars = jnp.argmax(star_logits, axis=-1)  # limit it to valid star ratings
     percent_correct = jnp.mean(predicted_stars == star_labels, dtype=jnp.float32)
     # jax.debug.breakpoint()
     metrics = {"percent_correct": percent_correct, "loss": loss}
@@ -134,15 +117,15 @@ def autoregressive_loss(model, tokens, labels, rngs, training: bool):
 
 @partial(nnx.jit, static_argnums=(2, 4), donate_argnums=3)
 def train_step(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, training_data: TrainingData, training: bool) -> tuple[TrainingData, Metrics]:
-    training_data, tokens, labels = read_training_data(training_data, rngs.shuffle(), batch_size)
+    training_data, tokens, lengths = read_training_data(training_data, rngs.shuffle(), batch_size)
 
     loss_fn = autoregressive_loss
 
     if training:
-        grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(optimizer.model, tokens, labels, rngs, training)
+        grads, metrics = nnx.grad(loss_fn, has_aux=True, wrt=nnx.Param)(optimizer.model, tokens, lengths)
         optimizer.update(grads)
     else:
-        _, metrics = loss_fn(optimizer.model, tokens, labels, rngs, training)
+        _, metrics = loss_fn(optimizer.model, tokens, lengths)
 
     return training_data, metrics
 

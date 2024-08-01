@@ -1,4 +1,4 @@
-from sentiment_analysis.model.types import ModelSettings
+from sentiment_analysis.model.transformer_settings import ModelSettings
 from typing import Literal
 from pydantic.dataclasses import dataclass
 
@@ -21,6 +21,6 @@ class ExperimentSettings:
     validation_file: str
     epochs: int
     batch_size: int
-    batch_per_call: int
+    accumulation_steps: int
     optimizer: OptimizerSettings
     model: ModelSettings
