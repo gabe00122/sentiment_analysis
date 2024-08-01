@@ -87,11 +87,3 @@ def load_settings(file: str | Path) -> ExperimentSettings:
         settings = replace(settings, seed=getrandbits(32))
 
     return settings
-
-
-def main():
-    Experiment.create_experiment("./experiment_settings/tiny.json")
-
-
-if __name__ == '__main__':
-    main()

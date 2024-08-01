@@ -3,7 +3,7 @@ from typing import Callable
 from flax import nnx
 from jax import Array
 from jax.typing import DTypeLike
-from sentiment_analysis.model.feed_forward import GLUFeedForwardBlock
+from sentiment_analysis.model.feed_forward import GLUBlock
 
 
 class TransformerLayer(nnx.Module):
@@ -41,7 +41,7 @@ class TransformerLayer(nnx.Module):
             #use_bias=False
         )
 
-        self.ff_block = GLUFeedForwardBlock(features, mlp_features, mlp_activation, kernel_init, dtype, param_dtype, dropout_rate, rngs)
+        self.ff_block = GLUBlock(features, mlp_features, mlp_activation, kernel_init, dtype, param_dtype, dropout_rate, rngs)
 
     def __call__(self, inputs, mask, deterministic: bool, rngs: nnx.Rngs):
         x = inputs

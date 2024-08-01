@@ -4,6 +4,7 @@ from jax import numpy as jnp
 
 offset = 6
 
+
 def encode(vocab: tokenmonster.Vocab, text: str, context_size: int) -> tuple[jax.Array, int]:
     tokens = list(vocab.tokenize(text))
     length = len(tokens)

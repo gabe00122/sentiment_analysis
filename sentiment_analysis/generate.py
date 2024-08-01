@@ -10,6 +10,7 @@ from sentiment_analysis.common.checkpointer import Checkpointer
 from sentiment_analysis.model import Model
 from sentiment_analysis.vocab import encode, decode
 
+
 def count_params(model) -> int:
     params = nnx.state(model, nnx.Param)
     return sum(x.size for x in jax.tree_util.tree_leaves(params))
@@ -30,7 +31,7 @@ def main():
         top_k = 50
         top_p = 0.90
 
-        logits =  model(tokens, True, nnx.Rngs(0))[i - 1]
+        logits = model(tokens, True, nnx.Rngs(0))[i - 1]
         logits /= temp
         probs = nnx.softmax(logits)
 
@@ -42,7 +43,6 @@ def main():
 
         sample_index = random.categorical(rng_key, top_k_logits)
         return top_k_indices[sample_index]
-
 
     vocab = Vocab(settings.model.vocab.path)
     rng_key = random.key(0)

@@ -1,41 +1,78 @@
+import functools
+
 from flax import nnx
 from jax.typing import DTypeLike
 
-class FeedForwardBlock(nnx.Module):
-    def __init__(self, in_features: int, hidden_features: int, activation, kernel_init: nnx.Initializer, dtype: DTypeLike, param_dtype: DTypeLike, dropout_rate: float, rngs: nnx.Rngs):
-        self.up_linear = nnx.Linear(in_features, hidden_features, kernel_init=kernel_init, dtype=dtype, param_dtype=param_dtype, rngs=rngs)
-        self.down_linear = nnx.Linear(hidden_features, in_features, kernel_init=kernel_init, dtype=dtype, param_dtype=param_dtype, rngs=rngs)
-        self.activation = activation
-        if dropout_rate > 0.0:
-            self.dropout = nnx.Dropout(dropout_rate)
 
-    def __call__(self, x, deterministic: bool, rngs: nnx.Rngs):
-        x = self.up_linear(x)
-        if self.dropout is not None:
-            x = self.dropout(x, deterministic=deterministic, rngs=rngs)
+class FFBlock(nnx.Module):
+    def __init__(
+        self,
+        d_model: int,
+        hidden_features: int,
+        activation,
+        *,
+        kernel_init: nnx.Initializer,
+        dtype: DTypeLike,
+        param_dtype: DTypeLike,
+        rngs: nnx.Rngs,
+    ):
+        self.d_model = d_model
+        self.hidden_features = hidden_features
+
+        linear = functools.partial(
+            nnx.Linear,
+            kernel_init=kernel_init,
+            use_bias=False,
+            dtype=dtype,
+            param_dtype=param_dtype,
+            rngs=rngs,
+        )
+
+        self.activation = activation
+        self.up_proj = linear(d_model, hidden_features)
+        self.down_proj = linear(d_model, hidden_features)
+
+    def __call__(self, inputs):
+        x = self.up_proj(inputs)
         x = self.activation(x)
-        x = self.down_linear(x)
-        return x
+        out = self.down_proj(x)
+        return out
 
 
-class GLUFeedForwardBlock(nnx.Module):
-    def __init__(self, in_features: int, hidden_features: int, activation, kernel_init: nnx.Initializer,
-                 dtype: DTypeLike, param_dtype: DTypeLike, dropout_rate: float, rngs: nnx.Rngs):
-        self.activation_linear = nnx.Linear(in_features, hidden_features, kernel_init=kernel_init, dtype=dtype,
-                                    param_dtype=param_dtype, rngs=rngs)
-        self.gate_linear = nnx.Linear(in_features, hidden_features, kernel_init=kernel_init, dtype=dtype,
-                                            param_dtype=param_dtype, rngs=rngs)
+class GLUBlock(nnx.Module):
+    def __init__(
+        self,
+        d_model: int,
+        hidden_features: int,
+        activation,
+        *,
+        kernel_init: nnx.Initializer,
+        dtype: DTypeLike,
+        param_dtype: DTypeLike,
+        rngs: nnx.Rngs,
+    ):
+        self.d_model = d_model
+        self.hidden_features = hidden_features
 
-        self.down_linear = nnx.Linear(hidden_features, in_features, kernel_init=kernel_init, dtype=dtype,
-                                      param_dtype=param_dtype, rngs=rngs)
+        linear = functools.partial(
+            nnx.Linear,
+            kernel_init=kernel_init,
+            use_bias=False,
+            dtype=dtype,
+            param_dtype=param_dtype,
+            rngs=rngs,
+        )
+
         self.activation = activation
 
-    def __call__(self, x, deterministic: bool, rngs: nnx.Rngs):
-        activation_x = self.activation_linear(x)
-        gate_x = self.gate_linear(x)
+        self.up_proj = linear(d_model, hidden_features)
+        self.gate_proj = linear(d_model, hidden_features)
+        self.down_proj = linear(hidden_features, d_model)
 
-        activation_x = self.activation(activation_x)
+    def __call__(self, inputs):
+        x = self.activation(self.up_proj(inputs))
+        gate = self.gate_proj(inputs)
 
-        x = activation_x * gate_x
-        x = self.down_linear(x)
-        return x
+        x = x * gate
+        out = self.down_proj(x)
+        return out
