@@ -110,7 +110,7 @@ def train(experiment: Experiment):
 
 
 def autoregressive_loss(model, tokens, lengths):
-    segment_position = jnp.arange(tokens.shape[-1])
+    segment_position = jnp.arange(tokens.shape[-1], dtype=model.dtype)
     logit_pred = model(tokens, segment_position)
 
     logit_pred = logit_pred[:, :-1, :]

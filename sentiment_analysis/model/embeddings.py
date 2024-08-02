@@ -25,7 +25,7 @@ class Embedder(nnx.Module):
         )
 
     def encode(self, x: jax.Array):
-        x = jnp.take(self.embedding_table.value, x, axis=0)
+        x = jnp.take(self.embedding_table.value, x, axis=0, fill_value=0)
 
         x = jnp.asarray(x, dtype=self.dtype)
         x *= jnp.sqrt(self.embedding_features).astype(self.dtype)

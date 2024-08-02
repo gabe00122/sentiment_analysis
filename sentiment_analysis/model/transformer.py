@@ -81,6 +81,7 @@ class AttentionBlock(nnx.Module):
             big_neg = jnp.finfo(self.dtype).min
             attn_weights = jnp.where(mask, attn_weights, big_neg)
 
+        # attn_weights = attn_weights.astype(jnp.float32)
         attn_weights = jax.nn.softmax(attn_weights).astype(self.dtype)
 
         x = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
@@ -165,14 +166,10 @@ class TransformerLayer(nnx.Module):
             rngs=rngs,
         )
 
-    def __call__(self, values: tuple[jax.Array, jax.Array, jax.Array], _):
-        inputs, segment_positions, mask = values
-
+    def __call__(self, inputs, segment_positions, mask):
         x = self.attention(inputs, segment_positions, mask=mask)
         x = self.ffn(x)
-
-        # pass along segment_positions for the scan
-        return (x, segment_positions, mask), None
+        return x
 
 
 class TransformerModel(nnx.Module):
@@ -198,17 +195,19 @@ class TransformerModel(nnx.Module):
             vocab_size, d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs
         )
 
-        self.layers = nnx.Scan.constructor(TransformerLayer, length=num_layers)(
-            num_heads,
-            d_model,
-            ffn_size,
-            activation_name=activation_name,
-            glu=glu,
-            dtype=dtype,
-            param_dtype=param_dtype,
-            kernel_init=kernel_init,
-            rngs=rngs,
-        )
+        self.layers = []
+        for _ in range(num_layers):
+            self.layers.append(TransformerLayer(
+                num_heads,
+                d_model,
+                ffn_size,
+                activation_name=activation_name,
+                glu=glu,
+                dtype=dtype,
+                param_dtype=param_dtype,
+                kernel_init=kernel_init,
+                rngs=rngs,
+            ))
 
         self.output_norm = nnx.RMSNorm(
             d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs
@@ -217,8 +216,10 @@ class TransformerModel(nnx.Module):
     def __call__(self, inputs, segment_positions):
         x = self.embedder.encode(inputs)
 
-        mask = nnx.make_causal_mask(inputs, dtype=self.dtype)
-        (x, _, _), _ = self.layers((x, segment_positions, mask), None)
+        mask = nnx.make_causal_mask(inputs, dtype=jnp.bool)
+
+        for layer in self.layers:
+            x = layer(x, segment_positions, mask)
 
         x = self.output_norm(x)
         x = self.embedder.decode(x)

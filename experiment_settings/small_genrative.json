@@ -1,40 +1,31 @@
 {
-    "seed": "random",
+    "seed": "1773875279",
     "training_file": "data/training.npz",
     "validation_file": "data/validation.npz",
-    "epochs": 3,
-    "batch_size": 64,
-    "batch_per_call": 24,
+    "epochs": 1,
+    "batch_size": 32,
+    "accumulation_steps": 48,
     "optimizer": {
         "type": "adamw",
-        "learning_rate": 0.001,
-        "warmup_steps": 1000,
+        "learning_rate": 0.003,
+        "warmup_steps": 200,
         "beta1": 0.9,
-        "beta2": 0.98,
-        "eps": 1e-12,
-        "weight_decay": 0.01
+        "beta2": 0.95,
+        "eps": 1e-8,
+        "weight_decay": 0.1
+    },
+    "vocab": {
+        "type": "token_monster",
+        "path": "vocab/yelp-32000-consistent-oneword-v1.vocab",
+        "size": 32000
     },
     "model": {
-        "vocab": {
-            "type": "token_monster",
-            "path": "vocab/yelp-32000-consistent-oneword-v1.vocab",
-            "size": 32000
-        },
-        "context_size": 128,
-        "hidden_features": 768,
-        "transformer_layers": 12,
-        "transformer_heads": 8,
-        "mlp_feature": 2048,
-        "activation": "gelu",
-        "normalization": "rms",
-        "max_position_offset": 30,
-        "output": {
-            "type": "classification_tokens",
-            "format": "softmax",
-            "output_tokens": 4,
-            "output_classes": 5
-        },
-        "dropout_rate": 0.0,
+        "num_layers": 12,
+        "num_heads": 8,
+        "d_model": 768,
+        "ffn_size": 2048,
+        "activation_name": "silu",
+        "glu": true,
         "dtype": "bfloat16",
         "param_dtype": "float32"
     }
