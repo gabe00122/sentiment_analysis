@@ -35,10 +35,9 @@ class AttentionBlock(nnx.Module):
 
         self.head_dim = self.d_model // self.num_heads
 
-        linear_general = functools.partial(
-            nnx.LinearGeneral,
+        self.in_proj = nnx.LinearGeneral(
             in_features=self.d_model,
-            out_features=(self.num_heads, self.head_dim),
+            out_features=(self.num_heads, self.head_dim * 3),
             dtype=self.dtype,
             param_dtype=self.param_dtype,
             kernel_init=kernel_init,
@@ -46,9 +45,6 @@ class AttentionBlock(nnx.Module):
             rngs=rngs,
         )
 
-        self.query = linear_general()
-        self.key = linear_general()
-        self.value = linear_general()
         self.out = nnx.LinearGeneral(
             in_features=(self.num_heads, self.head_dim),
             out_features=self.d_model,
@@ -61,9 +57,8 @@ class AttentionBlock(nnx.Module):
         )
 
     def __call__(self, inputs, segment_positions, *, mask):
-        query = self.query(inputs)
-        key = self.key(inputs)
-        value = self.value(inputs)
+        in_proj = self.in_proj(inputs)
+        query, key, value = jnp.split(in_proj, 3, -1)
 
         query = positional_embeddings.apply_rope(
             query, segment_positions, head_dim=self.head_dim
@@ -88,25 +83,6 @@ class AttentionBlock(nnx.Module):
         out = self.out(x)
 
         return out
-
-
-class ResidualBlock(nnx.Module):
-    def __init__(
-        self,
-        d_model,
-        block,
-        *,
-        dtype: DTypeLike | None = None,
-        param_dtype: DTypeLike = jnp.float32,
-        rngs: nnx.Rngs,
-    ):
-        self.norm = nnx.RMSNorm(
-            d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs
-        )
-        self.block = block
-
-    def __call__(self, inputs, *args, **kwargs):
-        return inputs + self.block(self.norm(inputs), *args, **kwargs)
 
 
 ActivationName = typing.Literal["relu", "silu", "gelu", "mish"]
@@ -138,37 +114,31 @@ class TransformerLayer(nnx.Module):
         kernel_init: nnx.Initializer = nnx.initializers.normal(),
         rngs: nnx.Rngs,
     ):
-        self.attention = ResidualBlock(
+        self.attention_norm = nnx.RMSNorm(d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+        self.attention = AttentionBlock(
+            num_heads,
             d_model,
-            AttentionBlock(
-                num_heads,
-                d_model,
-                dtype=dtype,
-                param_dtype=param_dtype,
-                kernel_init=kernel_init,
-                rngs=rngs,
-            ),
+            dtype=dtype,
+            param_dtype=param_dtype,
+            kernel_init=kernel_init,
             rngs=rngs,
         )
 
+        self.ffn_norm = nnx.RMSNorm(d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs)
         ff_block = GLUBlock if glu else FFBlock
-        self.ffn = ResidualBlock(
+        self.ffn = ff_block(
             d_model,
-            ff_block(
-                d_model,
-                ffn_size,
-                get_activation(activation_name),
-                dtype=dtype,
-                param_dtype=param_dtype,
-                kernel_init=kernel_init,
-                rngs=rngs,
-            ),
+            ffn_size,
+            get_activation(activation_name),
+            dtype=dtype,
+            param_dtype=param_dtype,
+            kernel_init=kernel_init,
             rngs=rngs,
         )
 
-    def __call__(self, inputs, segment_positions, mask):
-        x = self.attention(inputs, segment_positions, mask=mask)
-        x = self.ffn(x)
+    def __call__(self, x, segment_positions, mask):
+        x += self.attention(self.attention_norm(x), segment_positions, mask=mask)
+        x += self.ffn(self.ffn_norm(x))
         return x
 
 
