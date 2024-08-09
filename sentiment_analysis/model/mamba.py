@@ -1,4 +1,5 @@
 import jax
+import numpy as np
 from jax import numpy as jnp, random
 from flax import nnx
 from einops import rearrange
@@ -54,10 +55,13 @@ class Mamba2Layer(nnx.Module):
 
         dt_key = rngs.params()
 
+        # print(self.nheads)
         dt = jnp.exp(
             random.uniform(dt_key, (self.nheads,)) * (jnp.log(dt_max) - jnp.log(dt_min))
             + jnp.log(dt_min)
         )
+        # return
+
         dt = jnp.clip(dt, min=dt_init_floor)
         # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
         inv_dt = dt + jnp.log(-jnp.expm1(-dt))
@@ -72,14 +76,14 @@ class Mamba2Layer(nnx.Module):
 
         A = random.uniform(
             A_key, (self.nheads,), minval=A_init_range[0], maxval=A_init_range[1]
-        )  # torch.empty(self.nheads, dtype=torch.float32, device=device).uniform_(*A_init_range)
+        )
         A_log = jnp.log(A)
         self.A_log = nnx.Param(A_log)
         # self.register_buffer("A_log", torch.zeros(self.nheads, dtype=torch.float32, device=device), persistent=True)
         # self.A_log._no_weight_decay = True
 
         # D "skip" parameter
-        # self.D = nn.Parameter(torch.ones(self.nheads, device=device))
+        self.D = nnx.Param(jnp.ones(self.nheads))
         # self.D._no_weight_decay = True
 
         # Extra normalization layer right before output projection
@@ -113,13 +117,16 @@ class Mamba2Layer(nnx.Module):
         ii = self.ngroups * self.d_state
         iii = self.ngroups * self.d_state
         x, B, C = jnp.split(xBC, (i, i + ii), axis=-1)
+
+        x = rearrange(x, "b l (h p) -> b l h p", p=self.headdim) * dt[..., jnp.newaxis]
         y, _ = ssd(
-            rearrange(x, "b l (h p) -> b l h p", p=self.headdim) * dt[..., jnp.newaxis],
+            x,
             A * dt,
             rearrange(B, "b l (g n) -> b l g n", g=self.ngroups),
             rearrange(C, "b l (g n) -> b l g n", g=self.ngroups),
             block_len=self.chunk_size,
         )
+        y += x * self.D.value[np.newaxis, np.newaxis, :, np.newaxis]
         y = rearrange(y, "b l h p -> b l (h p)")
 
         # Multiply "gate" branch and apply extra normalization layer

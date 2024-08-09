@@ -38,7 +38,7 @@ def create_optax_optimizer(settings: ExperimentSettings, total_steps: int):
 def create_optimizer(
     settings: ExperimentSettings, rngs: nnx.Rngs, training_data: TrainingData
 ) -> nnx.Optimizer:
-    model = settings.model.create_model(settings.vocab.size, rngs)
+    model = settings.model.create_model(settings.vocab.size + 6, rngs)
     total_steps = (
         training_data.tokens.shape[0] // settings.batch_size
     ) * settings.epochs

@@ -1,17 +1,17 @@
 {
-    "seed": "1773875279",
+    "seed": "random",
     "training_file": "data/training.npz",
     "validation_file": "data/validation.npz",
-    "epochs": 1,
+    "epochs": 3,
     "batch_size": 32,
     "accumulation_steps": 48,
     "optimizer": {
         "type": "adamw",
-        "learning_rate": 0.003,
+        "learning_rate": 0.0012,
         "warmup_steps": 200,
         "beta1": 0.9,
         "beta2": 0.95,
-        "eps": 1e-8,
+        "eps": 1e-12,
         "weight_decay": 0.1
     },
     "vocab": {
@@ -21,10 +21,10 @@
     },
     "model": {
         "num_layers": 12,
-        "num_heads": 8,
+        "num_heads": 12,
         "d_model": 768,
         "ffn_size": 2048,
-        "activation_name": "silu",
+        "activation_name": "mish",
         "glu": true,
         "dtype": "bfloat16",
         "param_dtype": "float32"

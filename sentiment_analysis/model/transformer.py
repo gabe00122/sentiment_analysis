@@ -77,6 +77,9 @@ class AttentionBlock(nnx.Module):
             attn_weights = jnp.where(mask, attn_weights, big_neg)
 
         # attn_weights = attn_weights.astype(jnp.float32)
+        attn_logits_soft_cap = 50
+        attn_weights = jnp.tanh(attn_weights / attn_logits_soft_cap) * attn_logits_soft_cap
+
         attn_weights = jax.nn.softmax(attn_weights).astype(self.dtype)
 
         x = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
@@ -195,5 +198,6 @@ class TransformerModel(nnx.Module):
         x = self.embedder.decode(x)
 
         x = jnp.asarray(x, dtype=jnp.float32)
+        x = jnp.tanh(x / 30) * 30
 
         return x
