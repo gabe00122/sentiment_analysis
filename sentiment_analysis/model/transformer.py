@@ -1,4 +1,3 @@
-import functools
 import typing
 
 import jax
@@ -17,6 +16,7 @@ class AttentionBlock(nnx.Module):
         num_heads: int,
         d_model: int,
         *,
+        attention_softcap: float | None = None,
         dtype: DTypeLike | None = None,
         param_dtype: DTypeLike = jnp.float32,
         kernel_init: nnx.Initializer = nnx.initializers.normal(),
@@ -24,6 +24,7 @@ class AttentionBlock(nnx.Module):
     ):
         self.num_heads = num_heads
         self.d_model = d_model
+        self.attention_softcap = attention_softcap
         self.dtype = dtype
         self.param_dtype = param_dtype
 
@@ -57,11 +58,7 @@ class AttentionBlock(nnx.Module):
         )
 
     def __call__(self, inputs, segment_positions, *, mask):
-        print("input")
-        print(inputs.shape)
         in_proj = self.in_proj(inputs)
-        print("in_proj")
-        print(in_proj.shape)
 
         query, key, value = jnp.split(in_proj, 3, -1)
 
@@ -75,29 +72,19 @@ class AttentionBlock(nnx.Module):
         depth = query.shape[-1]
         query = query / jnp.sqrt(depth).astype(self.dtype)
 
-        print(query.shape)
-        print(key.shape)
         attn_weights = jnp.einsum("...qhd,...khd->...hqk", query, key)
 
         if mask is not None:
             big_neg = jnp.finfo(self.dtype).min
             attn_weights = jnp.where(mask, attn_weights, big_neg)
 
-        # attn_weights = attn_weights.astype(jnp.float32)
-        attn_logits_soft_cap = 50
-        attn_weights = jnp.tanh(attn_weights / attn_logits_soft_cap) * attn_logits_soft_cap
+        if self.attention_softcap is not None:
+            attn_weights = softcap(attn_weights, self.attention_softcap)
 
         attn_weights = jax.nn.softmax(attn_weights).astype(self.dtype)
 
-        print(attn_weights.shape)
-        print(value.shape)
         x = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
-        print("x")
-        print(x.shape)
         out = self.out(x)
-        print("out")
-        print(out.shape)
-
 
         return out
 
@@ -126,6 +113,7 @@ class TransformerLayer(nnx.Module):
         *,
         activation_name: ActivationName = "gelu",
         glu: bool = True,
+        attention_softcap: float | None = None,
         dtype: DTypeLike | None = None,
         param_dtype: DTypeLike = jnp.float32,
         kernel_init: nnx.Initializer = nnx.initializers.normal(),
@@ -135,6 +123,7 @@ class TransformerLayer(nnx.Module):
         self.attention = AttentionBlock(
             num_heads,
             d_model,
+            attention_softcap=attention_softcap,
             dtype=dtype,
             param_dtype=param_dtype,
             kernel_init=kernel_init,
@@ -170,10 +159,13 @@ class TransformerModel(nnx.Module):
         *,
         activation_name: ActivationName = "gelu",
         glu: bool = True,
+        attention_softcap: float,
+        output_softcap: float,
         dtype: DTypeLike | None = None,
         param_dtype: DTypeLike = jnp.float32,
         rngs: nnx.Rngs,
     ):
+        self.output_softcap = output_softcap
         self.dtype = dtype
 
         kernel_init = nnx.initializers.normal()
@@ -188,6 +180,7 @@ class TransformerModel(nnx.Module):
                 num_heads,
                 d_model,
                 ffn_size,
+                attention_softcap=attention_softcap,
                 activation_name=activation_name,
                 glu=glu,
                 dtype=dtype,
@@ -201,9 +194,7 @@ class TransformerModel(nnx.Module):
         )
 
     def __call__(self, inputs, segment_positions):
-        print(inputs.shape)
         x = self.embedder.encode(inputs)
-        print(x.shape)
 
         mask = nnx.make_causal_mask(inputs, dtype=jnp.bool)
 
@@ -211,12 +202,14 @@ class TransformerModel(nnx.Module):
             x = layer(x, segment_positions, mask)
 
         x = self.output_norm(x)
-
-        print(x.shape)
         x = self.embedder.decode(x)
-        print(x.shape)
-
         x = jnp.asarray(x, dtype=jnp.float32)
-        x = jnp.tanh(x / 30) * 30
+
+        if self.output_softcap is not None:
+            x = softcap(x, self.output_softcap)
 
         return x
+
+
+def softcap(x, cap):
+    return jnp.tanh(x / cap) * cap

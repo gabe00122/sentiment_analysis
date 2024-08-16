@@ -1,36 +1,33 @@
+import argparse
 from pathlib import Path
 
 import jax
 from flax import nnx
 from jax import numpy as jnp, random
-from tokenmonster import Vocab
 
 from sentiment_analysis.common.checkpointer import Checkpointer
 from sentiment_analysis.experiment import load_settings
-from sentiment_analysis.vocab import encode, decode
-
-
-def count_params(model) -> int:
-    params = nnx.state(model, nnx.Param)
-    return sum(x.size for x in jax.tree_util.tree_leaves(params))
+from sentiment_analysis.tokenizer import Tokenizer
+from sentiment_analysis.util import count_params
 
 
 def main():
-    path = Path("results/small_genrative_2024-08-04_23-50-54")
+    path = Path("results/small_generative_2024-08-04_23-50-54")
     settings = load_settings(path / "settings.json")
     checkpointer = Checkpointer(path / "checkpoints")
 
-    model = settings.model.create_model(settings.vocab.size + 6, nnx.Rngs(0))
+    model = settings.model.create_model(settings.vocab.size, nnx.Rngs(0))
     model = checkpointer.restore_latest(model)
     print(count_params(model))
+    checkpointer.close()
 
     @nnx.jit
-    def inference(tokens, i, rng_key):
+    def predict_token(tokens, i, rng_key):
         temp = 0.7
         top_k = 50
         top_p = 0.90
 
-        logits = model(tokens[jnp.newaxis, :], jnp.arange(128))[0, i - 1]
+        logits = model(tokens[jnp.newaxis, :], jnp.arange(context_size))[0, i - 1]
         logits /= temp
         probs = nnx.softmax(logits)
 
@@ -41,38 +38,38 @@ def main():
         top_k_logits = jnp.where(cumsum_top_p < top_p, top_k_logits, -jnp.inf)
 
         sample_index = random.categorical(rng_key, top_k_logits)
-        return top_k_indices[sample_index]
+        return top_k_indices[sample_index].astype(jnp.int16)
 
     @nnx.jit
-    def rating_prediction(tokens: jax.Array, length: jax.Array):
+    def predict_rating(tokens: jax.Array, length: jax.Array):
         tokens = tokens.at[length].set(0)
-        logits = model(tokens[jnp.newaxis, :], jnp.arange(128))[0, length]
+        logits = model(tokens[jnp.newaxis, :], jnp.arange(context_size))[0, length]
 
         return jnp.argmax(logits)
 
-    vocab = Vocab(settings.vocab.path)
+    context_size = 128
+    tokenizer = Tokenizer(settings.vocab.path, context_size)
     rng_key = random.key(0)
 
     while True:
         prompt = input("prompt: ")
 
-        context_size = 128
-        context, length = encode(vocab, prompt, context_size)
+        context, length = tokenizer.encode(prompt)
 
         stars = None
 
         for i in range(length, context_size):
             rng_key, sample_key = random.split(rng_key)
 
-            pred_token = inference(context, i, sample_key)
+            pred_token = predict_token(context, i, sample_key)
 
             if pred_token == 0:
-                stars = rating_prediction(context, i)
+                stars = predict_rating(context, i)
                 break
 
             context = context.at[i].set(pred_token)
 
-        output = decode(vocab, context)
+        output = tokenizer.decode(context)
         print(output)
 
         if stars is not None:

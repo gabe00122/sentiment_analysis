@@ -20,7 +20,7 @@ crc32c = "^2.4"
 #penzai = {extras = ["notebook"], version = "^0.1.2"}
 pydantic = "^2.7.4"
 tokenmonster = "^1.1.12"
-tensorflow = "^2.17.0"
+gradio = "^4.41.0"
 
 
 [build-system]

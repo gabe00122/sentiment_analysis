@@ -127,7 +127,6 @@ def autoregressive_loss(model, tokens, lengths):
 
     predicted_stars = jnp.argmax(star_logits, axis=-1)  # limit it to valid star ratings
     percent_correct = jnp.mean(predicted_stars == star_labels, dtype=jnp.float32)
-    # jax.debug.breakpoint()
     metrics = {"percent_correct": percent_correct, "loss": loss}
 
     return loss, metrics
