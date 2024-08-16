@@ -1,15 +1,13 @@
 from pathlib import Path
 
-from flax import nnx
-from tokenmonster import Vocab
-from jax import numpy as jnp, random
 import jax
+from flax import nnx
+from jax import numpy as jnp, random
+from tokenmonster import Vocab
 
-from sentiment_analysis.experiment import Experiment, load_settings
 from sentiment_analysis.common.checkpointer import Checkpointer
-# from sentiment_analysis.model.transformer import TransformerModel
+from sentiment_analysis.experiment import load_settings
 from sentiment_analysis.vocab import encode, decode
-from sentiment_analysis.model.mamba import Mamba2Model
 
 
 def count_params(model) -> int:
@@ -22,7 +20,7 @@ def main():
     settings = load_settings(path / "settings.json")
     checkpointer = Checkpointer(path / "checkpoints")
 
-    model = settings.model.create_model(settings.vocab.size + 6, nnx.Rngs(0)) #Model(settings.model, nnx.Rngs(0))
+    model = settings.model.create_model(settings.vocab.size + 6, nnx.Rngs(0))
     model = checkpointer.restore_latest(model)
     print(count_params(model))
 
@@ -45,6 +43,13 @@ def main():
         sample_index = random.categorical(rng_key, top_k_logits)
         return top_k_indices[sample_index]
 
+    @nnx.jit
+    def rating_prediction(tokens: jax.Array, length: jax.Array):
+        tokens = tokens.at[length].set(0)
+        logits = model(tokens[jnp.newaxis, :], jnp.arange(128))[0, length]
+
+        return jnp.argmax(logits)
+
     vocab = Vocab(settings.vocab.path)
     rng_key = random.key(0)
 
@@ -61,8 +66,8 @@ def main():
 
             pred_token = inference(context, i, sample_key)
 
-            if pred_token < 5:
-                stars = pred_token
+            if pred_token == 0:
+                stars = rating_prediction(context, i)
                 break
 
             context = context.at[i].set(pred_token)
@@ -71,7 +76,7 @@ def main():
         print(output)
 
         if stars is not None:
-            print("\nStars: " + str(stars.item()))
+            print("\nStars: " + ("⭐" * stars))
 
 
 if __name__ == "__main__":

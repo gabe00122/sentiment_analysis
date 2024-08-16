@@ -57,7 +57,12 @@ class AttentionBlock(nnx.Module):
         )
 
     def __call__(self, inputs, segment_positions, *, mask):
+        print("input")
+        print(inputs.shape)
         in_proj = self.in_proj(inputs)
+        print("in_proj")
+        print(in_proj.shape)
+
         query, key, value = jnp.split(in_proj, 3, -1)
 
         query = positional_embeddings.apply_rope(
@@ -70,6 +75,8 @@ class AttentionBlock(nnx.Module):
         depth = query.shape[-1]
         query = query / jnp.sqrt(depth).astype(self.dtype)
 
+        print(query.shape)
+        print(key.shape)
         attn_weights = jnp.einsum("...qhd,...khd->...hqk", query, key)
 
         if mask is not None:
@@ -82,8 +89,15 @@ class AttentionBlock(nnx.Module):
 
         attn_weights = jax.nn.softmax(attn_weights).astype(self.dtype)
 
+        print(attn_weights.shape)
+        print(value.shape)
         x = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
+        print("x")
+        print(x.shape)
         out = self.out(x)
+        print("out")
+        print(out.shape)
+
 
         return out
 
@@ -187,7 +201,9 @@ class TransformerModel(nnx.Module):
         )
 
     def __call__(self, inputs, segment_positions):
+        print(inputs.shape)
         x = self.embedder.encode(inputs)
+        print(x.shape)
 
         mask = nnx.make_causal_mask(inputs, dtype=jnp.bool)
 
@@ -195,7 +211,10 @@ class TransformerModel(nnx.Module):
             x = layer(x, segment_positions, mask)
 
         x = self.output_norm(x)
+
+        print(x.shape)
         x = self.embedder.decode(x)
+        print(x.shape)
 
         x = jnp.asarray(x, dtype=jnp.float32)
         x = jnp.tanh(x / 30) * 30
