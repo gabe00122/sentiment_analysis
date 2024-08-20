@@ -1,1 +1,1 @@
-results/small_generative_2024-08-04_23-50-54/checkpoints filter=lfs diff=lfs merge=lfs -text
+results/**/checkpoints/**/* filter=lfs diff=lfs merge=lfs -text

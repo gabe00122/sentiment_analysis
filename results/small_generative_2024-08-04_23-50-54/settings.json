@@ -25,6 +25,8 @@
     "d_model": 768,
     "ffn_size": 2048,
     "activation_name": "mish",
+    "attention_softcap": 50,
+    "output_softcap": 30,
     "glu": true,
     "dtype": "bfloat16",
     "param_dtype": "float32"
