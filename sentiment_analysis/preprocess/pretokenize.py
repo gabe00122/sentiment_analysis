@@ -3,13 +3,14 @@ import numpy as np
 from pathlib import Path
 import json
 
+from sentiment_analysis.constants import CONTEXT_SIZE, SPECIAL_TOKENS, EMPTY_TOKEN, END_TOKEN
+
 
 def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
     input_path = Path(path).absolute()
     output_path = input_path.with_suffix(".npz")
 
     output_tokens = []
-    # output_labels = []
     output_length = []
 
     with open(input_path, "r") as f:
@@ -20,10 +21,10 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
 
             tokens = list(vocab.tokenize(text))
             if len(tokens) <= max_length - 2:
-                tokens = [token + 6 for token in tokens] + [0, label]
+                tokens = [token + SPECIAL_TOKENS for token in tokens] + [END_TOKEN, label]
                 token_length = len(tokens)
 
-                tokens = tokens + ([-1] * (max_length - token_length))
+                tokens = tokens + ([EMPTY_TOKEN] * (max_length - token_length))
                 output_tokens.append(tokens)
                 output_length.append(token_length)
 
@@ -43,7 +44,7 @@ def main():
     paths = ["./data/test.json", "./data/training.json", "./data/validation.json"]
 
     for p in paths:
-        pretokenize(p, vocab, 128)
+        pretokenize(p, vocab, CONTEXT_SIZE)
 
 
 if __name__ == "__main__":

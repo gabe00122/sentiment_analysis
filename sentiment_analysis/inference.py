@@ -1,25 +1,19 @@
-import argparse
-from pathlib import Path
 
 import jax
 from flax import nnx
 from jax import numpy as jnp, random
 
 from sentiment_analysis.common.checkpointer import Checkpointer
-from sentiment_analysis.experiment import load_settings
+from sentiment_analysis.experiment import load_settings, Experiment
 from sentiment_analysis.tokenizer import Tokenizer
 from sentiment_analysis.util import count_params
+from sentiment_analysis.constants import CONTEXT_SIZE
 
 
-def main():
-    path = Path("results/small_generative_2024-08-04_23-50-54")
-    settings = load_settings(path / "settings.json")
-    checkpointer = Checkpointer(path / "checkpoints")
-
-    model = settings.model.create_model(settings.vocab.size, nnx.Rngs(0))
-    model = checkpointer.restore_latest(model)
+def inference_cli(model_path: str):
+    experiment = Experiment.load(model_path)
+    model = experiment.restore_last_checkpoint()
     print(count_params(model))
-    checkpointer.close()
 
     @nnx.jit
     def predict_token(tokens, i, rng_key):
@@ -27,7 +21,7 @@ def main():
         top_k = 50
         top_p = 0.90
 
-        logits = model(tokens[jnp.newaxis, :], jnp.arange(context_size))[0, i - 1]
+        logits = model(tokens[jnp.newaxis, :], jnp.arange(CONTEXT_SIZE))[0, i - 1]
         logits /= temp
         probs = nnx.softmax(logits)
 
@@ -43,12 +37,11 @@ def main():
     @nnx.jit
     def predict_rating(tokens: jax.Array, length: jax.Array):
         tokens = tokens.at[length].set(0)
-        logits = model(tokens[jnp.newaxis, :], jnp.arange(context_size))[0, length]
+        logits = model(tokens[jnp.newaxis, :], jnp.arange(CONTEXT_SIZE))[0, length]
 
         return jnp.argmax(logits)
 
-    context_size = 128
-    tokenizer = Tokenizer(settings.vocab.path, context_size)
+    tokenizer = Tokenizer(experiment.settings.vocab.path, CONTEXT_SIZE)
     rng_key = random.key(0)
 
     while True:
@@ -58,7 +51,7 @@ def main():
 
         stars = None
 
-        for i in range(length, context_size):
+        for i in range(length, CONTEXT_SIZE):
             rng_key, sample_key = random.split(rng_key)
 
             pred_token = predict_token(context, i, sample_key)
@@ -74,7 +67,3 @@ def main():
 
         if stars is not None:
             print("\nStars: " + ("⭐" * stars))
-
-
-if __name__ == "__main__":
-    main()

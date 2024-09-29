@@ -10,8 +10,7 @@ from pydantic import TypeAdapter, BaseModel
 from flax import nnx
 
 from sentiment_analysis.common.checkpointer import Checkpointer
-from sentiment_analysis.types import ExperimentSettings
-from sentiment_analysis.model.transformer import TransformerModel
+from sentiment_analysis.training_settings import ExperimentSettings
 
 
 class ExperimentMetadata(BaseModel):
@@ -92,13 +91,13 @@ class Experiment:
 
     @classmethod
     def load(cls, path: str) -> "Experiment":
-        path = Path(path)
-        settings = load_settings(path / "settings.json")
+        path_obj = Path(path)
+        settings = load_settings(path_obj / "settings.json")
 
-        metadata_text = (path / "metadata.json").read_text()
+        metadata_text = (path_obj / "metadata.json").read_text()
         metadata = ExperimentMetadata.model_validate_json(metadata_text)
 
-        experiment = cls(path.name, settings, metadata)
+        experiment = cls(path_obj.name, settings, metadata)
 
         return experiment
 
