@@ -5,14 +5,14 @@ def inference_parser(subparsers):
     parser = subparsers.add_parser("inference")
     parser.set_defaults(func=run_inference)
 
-    parser.add_argument("-p", "--path", required=True)
+    parser.add_argument("-m", "--model", required=True)
 
     return parser
 
 
 def run_inference(args):
-    from sentiment_analysis.inference import inference_cli
-    inference_cli(args.path)
+    from sentiment_lm.inference import inference_cli
+    inference_cli(args.model)
 
 
 def train_parser(subparsers):
@@ -25,8 +25,8 @@ def train_parser(subparsers):
 
 
 def run_train(args):
-    from sentiment_analysis.experiment import Experiment
-    from sentiment_analysis.train import train
+    from sentiment_lm.experiment import Experiment
+    from sentiment_lm.train import train
 
     experiment = Experiment.create_experiment(args.settings)
     train(experiment)

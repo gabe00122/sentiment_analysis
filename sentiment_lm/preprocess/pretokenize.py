@@ -3,7 +3,7 @@ import numpy as np
 from pathlib import Path
 import json
 
-from sentiment_analysis.constants import CONTEXT_SIZE, SPECIAL_TOKENS, EMPTY_TOKEN, END_TOKEN
+from sentiment_lm.constants import CONTEXT_SIZE, SPECIAL_TOKENS, EMPTY_TOKEN, END_TOKEN
 
 
 def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):

@@ -1,4 +1,4 @@
-from sentiment_analysis.model.transformer_settings import ModelSettings
+from sentiment_lm.model.transformer_settings import ModelSettings
 from typing import Literal
 from pydantic.dataclasses import dataclass
 

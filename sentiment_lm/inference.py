@@ -3,11 +3,10 @@ import jax
 from flax import nnx
 from jax import numpy as jnp, random
 
-from sentiment_analysis.common.checkpointer import Checkpointer
-from sentiment_analysis.experiment import load_settings, Experiment
-from sentiment_analysis.tokenizer import Tokenizer
-from sentiment_analysis.util import count_params
-from sentiment_analysis.constants import CONTEXT_SIZE
+from sentiment_lm.experiment import Experiment
+from sentiment_lm.tokenizer import Tokenizer
+from sentiment_lm.util import count_params
+from sentiment_lm.constants import CONTEXT_SIZE
 
 
 def inference_cli(model_path: str):

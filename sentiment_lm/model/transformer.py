@@ -5,9 +5,9 @@ from jax import numpy as jnp
 from jax.typing import DTypeLike
 from flax import nnx
 
-from sentiment_analysis.model import positional_embeddings
-from sentiment_analysis.model.embeddings import Embedder
-from sentiment_analysis.model.feed_forward import GLUBlock, FFBlock
+from sentiment_lm.model import positional_embeddings
+from sentiment_lm.model.embeddings import Embedder
+from sentiment_lm.model.feed_forward import GLUBlock, FFBlock
 
 
 class AttentionBlock(nnx.Module):

@@ -9,8 +9,8 @@ from functools import cached_property
 from pydantic import TypeAdapter, BaseModel
 from flax import nnx
 
-from sentiment_analysis.common.checkpointer import Checkpointer
-from sentiment_analysis.training_settings import ExperimentSettings
+from sentiment_lm.common.checkpointer import Checkpointer
+from sentiment_lm.training_settings import ExperimentSettings
 
 
 class ExperimentMetadata(BaseModel):

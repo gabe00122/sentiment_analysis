@@ -7,16 +7,16 @@ import optax
 from flax import nnx
 from jax import numpy as jnp, random
 
-from sentiment_analysis.common.checkpointer import Checkpointer
-from sentiment_analysis.common.dataset_iterator import (
+from sentiment_lm.common.checkpointer import Checkpointer
+from sentiment_lm.common.dataset_iterator import (
     read_training_data,
     TrainingData,
     load_training_data,
 )
-from sentiment_analysis.common.metrics import TensorboardWriter, Metrics
-from sentiment_analysis.experiment import Experiment
-from sentiment_analysis.optimizer import create_optimizer
-from sentiment_analysis.util import set_flags, count_params
+from sentiment_lm.common.metrics import TensorboardWriter, Metrics
+from sentiment_lm.experiment import Experiment
+from sentiment_lm.optimizer import create_optimizer
+from sentiment_lm.util import set_flags, count_params
 
 
 def train(experiment: Experiment):

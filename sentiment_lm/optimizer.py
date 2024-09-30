@@ -1,8 +1,8 @@
 import optax
 from flax import nnx
 
-from sentiment_analysis.types import ExperimentSettings
-from sentiment_analysis.common.dataset_iterator import TrainingData
+from sentiment_lm.experiment import ExperimentSettings
+from sentiment_lm.common.dataset_iterator import TrainingData
 
 
 def create_optax_optimizer(settings: ExperimentSettings, total_steps: int):

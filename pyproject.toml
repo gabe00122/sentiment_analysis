@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "sentiment-analysis"
+name = "sentiment_lm"
 version = "0.1.0"
 description = ""
 authors = ["Gabriel keith <gabe.keith@yahoo.com>"]
@@ -23,7 +23,7 @@ tokenmonster = "^1.1.12"
 gradio = "^4.41.0"
 
 [tool.poetry.scripts]
-sentiment_analysis = "sentiment_analysis.cli:main"
+sentiment_lm = "sentiment_lm.cli:main"
 
 [build-system]
 requires = ["poetry-core"]

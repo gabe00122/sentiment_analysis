@@ -1,7 +1,7 @@
 import jax
 import tokenmonster
 from jax import numpy as jnp
-from sentiment_analysis.constants import SPECIAL_TOKENS, EMPTY_TOKEN
+from sentiment_lm.constants import SPECIAL_TOKENS, EMPTY_TOKEN
 
 
 class Tokenizer:

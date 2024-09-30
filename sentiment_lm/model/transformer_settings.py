@@ -3,8 +3,8 @@ from typing import Literal
 from pydantic.dataclasses import dataclass
 from flax import nnx
 
-from sentiment_analysis.constants import SPECIAL_TOKENS
-from sentiment_analysis.model.transformer import ActivationName, TransformerModel
+from sentiment_lm.constants import SPECIAL_TOKENS
+from sentiment_lm.model.transformer import ActivationName, TransformerModel
 
 
 @dataclass(frozen=True)
