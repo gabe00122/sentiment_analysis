@@ -1,4 +1,6 @@
 from argparse import ArgumentParser
+from pathlib import Path
+from rich.traceback import install
 
 
 def inference_parser(subparsers):
@@ -12,7 +14,7 @@ def inference_parser(subparsers):
 
 def run_inference(args):
     from sentiment_lm.inference import inference_cli
-    inference_cli(args.model)
+    inference_cli(Path(args.model))
 
 
 def train_parser(subparsers):
@@ -28,11 +30,13 @@ def run_train(args):
     from sentiment_lm.experiment import Experiment
     from sentiment_lm.train import train
 
-    experiment = Experiment.create_experiment(args.settings)
+    experiment = Experiment.create_experiment(Path(args.settings))
     train(experiment)
 
 
 def main():
+    install(show_locals=True)
+
     parser = ArgumentParser("sentiment_analysis")
 
     subparsers = parser.add_subparsers(required=True)

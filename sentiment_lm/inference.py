@@ -1,4 +1,5 @@
 
+from pathlib import Path
 import jax
 from flax import nnx
 from jax import numpy as jnp, random
@@ -9,7 +10,7 @@ from sentiment_lm.util import count_params
 from sentiment_lm.constants import CONTEXT_SIZE
 
 
-def inference_cli(model_path: str):
+def inference_cli(model_path: Path):
     experiment = Experiment.load(model_path)
     model = experiment.restore_last_checkpoint()
     print(count_params(model))

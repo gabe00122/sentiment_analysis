@@ -35,11 +35,11 @@ def _get_iso_time():
 class Experiment:
     def __init__(
         self,
-        name: str,
+        path: Path,
         settings: ExperimentSettings,
-        metadata: ExperimentMetadata = _create_metadata(),
+        metadata: ExperimentMetadata,
     ):
-        self.name = name
+        self.path = path
         self.settings = settings
         self.metadata = metadata
 
@@ -56,14 +56,6 @@ class Experiment:
         metadata_text = self.metadata.model_dump_json(indent=2)
         metadata_path = self.path / Path("metadata.json")
         metadata_path.write_text(metadata_text)
-
-    @cached_property
-    def run_name(self):
-        return f"{self.name}_{self._file_time_format}"
-
-    @cached_property
-    def path(self) -> Path:
-        return Path("results") / Path(self.run_name)
 
     @cached_property
     def _file_time_format(self) -> str:
@@ -90,23 +82,24 @@ class Experiment:
         return model
 
     @classmethod
-    def load(cls, path: str) -> "Experiment":
-        path_obj = Path(path)
-        settings = load_settings(path_obj / "settings.json")
+    def load(cls, path: Path) -> "Experiment":
+        settings = load_settings(path / "settings.json")
 
-        metadata_text = (path_obj / "metadata.json").read_text()
-        metadata = ExperimentMetadata.model_validate_json(metadata_text)
+        raw_metadata = (path / "metadata.json").read_bytes()
+        metadata = ExperimentMetadata.model_validate_json(raw_metadata)
 
-        experiment = cls(path_obj.name, settings, metadata)
+        experiment = cls(path, settings, metadata)
 
         return experiment
 
     @classmethod
-    def create_experiment(cls, settings_file: str | Path) -> "Experiment":
-        settings_file = Path(settings_file)
+    def create_experiment(cls, settings_file: Path) -> "Experiment":
         settings = load_settings(settings_file)
+        metadata = _create_metadata()
 
-        experiment = cls(settings_file.stem, settings)
+        experiment_path = _get_experiment_path(settings_file, metadata.start_time)
+
+        experiment = cls(experiment_path, settings, metadata)
         experiment.init_dir()
 
         return experiment
@@ -123,3 +116,11 @@ def load_settings(file: str | Path) -> ExperimentSettings:
         settings = replace(settings, seed=getrandbits(32))
 
     return settings
+
+
+def _get_experiment_path(settings_file: Path, start_time: datetime.datetime) -> Path:
+    timestamp = start_time.strftime("%Y-%m-%d_%H-%M-%S")
+    experiment_name = f"{settings_file.stem}_{timestamp}"
+    experiment_path = Path("results") / experiment_name
+
+    return experiment_path
