@@ -4,8 +4,10 @@ import jax
 from flax import nnx
 from jax import numpy as jnp, random
 
+import rich
 from rich.console import Console
 from rich.prompt import Prompt
+import rich.table
 
 from sentiment_lm.experiment import Experiment
 from sentiment_lm.tokenizer import Tokenizer
@@ -17,11 +19,12 @@ def inference_cli(
         model_path: Path,
         temperature: float,
         top_k: int,
-        top_p: float
+        top_p: float,
     ):
     console = Console()
 
     experiment = Experiment.load(model_path)
+    console.print(_print_model_card(experiment))
     
     console.print("[1/3] Loading checkpoint")
     model = experiment.restore_last_checkpoint()
@@ -58,13 +61,16 @@ def inference_cli(
     predict_rating(jnp.zeros(CONTEXT_SIZE, jnp.int16), jnp.int32(0))
 
     while True:
-        prompt = Prompt.ask("\n[blue]prompt[/blue]")
+        prompt = Prompt.ask("\n[blue]Prompt[/blue]")
+
+        if prompt == '':
+            continue
 
         if prompt == '/bye':
             console.print("[green]Goodbye![/green]")
-            return
+            break
 
-        console.print(f"[green]{prompt}[/green]", end="")
+        console.print(f"\n[green]{prompt}[/green]", end="")
         context, length = tokenizer.encode(prompt)
         stars = None
 
@@ -83,4 +89,8 @@ def inference_cli(
             context = context.at[i].set(pred_token)
 
         if stars is not None:
-            print("\n\n[cyan]Stars[/cyan]: " + ("⭐" * stars))
+            console.print("\n\n[yellow]Stars[/yellow]: " + ("⭐" * stars))
+
+
+def _print_model_card(experiment: Experiment):
+    return experiment.settings
