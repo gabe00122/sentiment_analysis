@@ -1,6 +1,6 @@
 # Sentiment Language Model
 
-A 109 million parameter generative language trained on yelp data for next token prediction and review rating prediction.
+A 109 million parameter generative language trained on Yelp data for next token prediction and review rating prediction.
 
 ## Demo
 ![Test](/assets/demo.gif)
