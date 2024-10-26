@@ -9,6 +9,7 @@ from sentiment_lm import preprocess
 app = typer.Typer()
 app.add_typer(preprocess.app, name="preprocess")
 
+
 @app.command()
 def inference(
     model: Annotated[Path, typer.Option()],
