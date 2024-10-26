@@ -21,7 +21,10 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
 
             tokens = list(vocab.tokenize(text))
             if len(tokens) <= max_length - 2:
-                tokens = [token + SPECIAL_TOKENS for token in tokens] + [END_TOKEN, label]
+                tokens = [token + SPECIAL_TOKENS for token in tokens] + [
+                    END_TOKEN,
+                    label,
+                ]
                 token_length = len(tokens)
 
                 tokens = tokens + ([EMPTY_TOKEN] * (max_length - token_length))

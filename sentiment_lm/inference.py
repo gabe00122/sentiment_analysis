@@ -1,4 +1,3 @@
-
 from pathlib import Path
 import jax
 from flax import nnx
@@ -16,16 +15,16 @@ from sentiment_lm.constants import CONTEXT_SIZE
 
 
 def inference_cli(
-        model_path: Path,
-        temperature: float,
-        top_k: int,
-        top_p: float,
-    ):
+    model_path: Path,
+    temperature: float,
+    top_k: int,
+    top_p: float,
+):
     console = Console()
 
     experiment = Experiment.load(model_path)
     console.print(_print_model_card(experiment))
-    
+
     console.print("[1/3] Loading checkpoint")
     model = experiment.restore_last_checkpoint()
     console.print(f"Finished loading {count_params(model)} parameters")
@@ -63,10 +62,10 @@ def inference_cli(
     while True:
         prompt = Prompt.ask("\n[blue]Prompt[/blue]")
 
-        if prompt == '':
+        if prompt == "":
             continue
 
-        if prompt == '/bye':
+        if prompt == "/bye":
             console.print("[green]Goodbye![/green]")
             break
 
@@ -83,7 +82,7 @@ def inference_cli(
                 stars = predict_rating(context, jnp.int32(i))
                 break
 
-            text = tokenizer.decode2(pred_token)
+            text = tokenizer.decode_token(pred_token)
             console.print(text, end="")
 
             context = context.at[i].set(pred_token)

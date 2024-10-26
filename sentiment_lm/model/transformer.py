@@ -119,7 +119,9 @@ class TransformerLayer(nnx.Module):
         kernel_init: nnx.Initializer = nnx.initializers.normal(),
         rngs: nnx.Rngs,
     ):
-        self.attention_norm = nnx.RMSNorm(d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+        self.attention_norm = nnx.RMSNorm(
+            d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+        )
         self.attention = AttentionBlock(
             num_heads,
             d_model,
@@ -130,7 +132,9 @@ class TransformerLayer(nnx.Module):
             rngs=rngs,
         )
 
-        self.ffn_norm = nnx.RMSNorm(d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs)
+        self.ffn_norm = nnx.RMSNorm(
+            d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs
+        )
         ff_block = GLUBlock if glu else FFBlock
         self.ffn = ff_block(
             d_model,
@@ -176,18 +180,20 @@ class TransformerModel(nnx.Module):
 
         self.layers = []
         for _ in range(num_layers):
-            self.layers.append(TransformerLayer(
-                num_heads,
-                d_model,
-                ffn_size,
-                attention_softcap=attention_softcap,
-                activation_name=activation_name,
-                glu=glu,
-                dtype=dtype,
-                param_dtype=param_dtype,
-                kernel_init=kernel_init,
-                rngs=rngs,
-            ))
+            self.layers.append(
+                TransformerLayer(
+                    num_heads,
+                    d_model,
+                    ffn_size,
+                    attention_softcap=attention_softcap,
+                    activation_name=activation_name,
+                    glu=glu,
+                    dtype=dtype,
+                    param_dtype=param_dtype,
+                    kernel_init=kernel_init,
+                    rngs=rngs,
+                )
+            )
 
         self.output_norm = nnx.RMSNorm(
             d_model, dtype=dtype, param_dtype=param_dtype, rngs=rngs

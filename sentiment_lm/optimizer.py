@@ -8,8 +8,10 @@ from sentiment_lm.common.dataset_iterator import TrainingData
 def create_optax_optimizer(settings: ExperimentSettings, total_steps: int):
     every_k_schedule = settings.accumulation_steps
     learning_rate = optax.warmup_cosine_decay_schedule(
-        0, settings.optimizer.learning_rate, settings.optimizer.warmup_steps,
-        total_steps // every_k_schedule
+        0,
+        settings.optimizer.learning_rate,
+        settings.optimizer.warmup_steps,
+        total_steps // every_k_schedule,
     )
 
     if settings.optimizer.weight_decay > 0:

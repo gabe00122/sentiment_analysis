@@ -21,13 +21,13 @@ class Tokenizer:
 
         return tokens, length
 
-    def decode(self, tokens: jax.Array) -> str:
+    def decode_context(self, tokens: jax.Array) -> str:
         tokens = tokens - SPECIAL_TOKENS
         tokens_list = tokens.tolist()
         tokens_list = [x for x in tokens_list if x >= 0]
         return self.vocab.decode(tokens_list)
 
-    def decode2(self, token: jax.Array) -> str:
+    def decode_token(self, token: jax.Array) -> str:
         int_token: int = token.item()
         int_token -= SPECIAL_TOKENS
         return self.decoder.decode(int_token)
