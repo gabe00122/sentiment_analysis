@@ -1,17 +1,19 @@
 import random
-from pydantic import BaseModel
 from pathlib import Path
 import json
 
+data_path = "./data/yelp_academic_dataset_review.json"
+training_path = "./data/training.json"
+test_path = "./data/test.json"
+validation_path = "./data/validation.json"
 
-class TestSplitConfig(BaseModel):
-    test_ratio: float
-    validation_ratio: float
-    seed: int
 
-
-def train_test_split(data_path: Path, config: TestSplitConfig):
-    random.seed(config.seed)
+def train_test_split(
+    test_ratio: float = 0.2,
+    validation_ratio: float = 0.05,
+    seed: int = 1234,
+):
+    random.seed(seed)
     training_count = 0
     test_count = 0
     validation_count = 0
@@ -23,19 +25,19 @@ def train_test_split(data_path: Path, config: TestSplitConfig):
 
     with (
         open(data_path, "r") as data_file,
-        open("./data/training.json", "w") as training,
-        open("./data/test.json", "w") as test,
-        open("./data/validation.json", "w") as validation,
+        open(training_path, "w") as training,
+        open(test_path, "w") as test,
+        open(validation_path, "w") as validation,
     ):
         for i, line in enumerate(data_file):
             data = json.loads(line)
             out_data = json.dumps({"text": data["text"], "label": data["stars"]}) + "\n"
             sample = random.uniform(0, 1)
 
-            if sample <= config.validation_ratio:
+            if sample <= validation_ratio:
                 validation.write(out_data)
                 validation_count += 1
-            elif sample <= config.test_ratio + config.validation_ratio:
+            elif sample <= test_ratio + validation_ratio:
                 test.write(out_data)
                 test_count += 1
             else:
@@ -49,9 +51,7 @@ def train_test_split(data_path: Path, config: TestSplitConfig):
 
 
 def main():
-    config_text = Path("./experiments_settings/test_split.json").read_text()
-    config = TestSplitConfig.model_validate_json(config_text)
-    train_test_split(Path("./data/raw/yelp_academic_dataset_review.json"), config)
+    train_test_split()
 
 
 if __name__ == "__main__":

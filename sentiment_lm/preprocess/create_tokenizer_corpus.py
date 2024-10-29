@@ -1,28 +1,28 @@
 import random
-from pydantic import BaseModel
 from pathlib import Path
 import json
 
-
-class TokenizerCorpusConfig(BaseModel):
-    corpus_ratio: float
-    seed: int
+data_path = "./data/training.json"
+corpus_path = "./data/corpus.txt"
 
 
-def create_tokenizer_corpus(data_path: Path, config: TokenizerCorpusConfig):
-    random.seed(config.seed)
+def create_tokenizer_corpus(
+    corpus_ratio: float = 0.1,
+    seed: int = 42,
+):
+    random.seed(seed)
     sentence_count = 0
 
     def print_stats():
         print(f"sentence_count = {sentence_count}")
 
-    with open(data_path, "r") as data_file, open("./data/corpus.txt", "w") as corpus:
+    with open(data_path, "r") as data_file, open(corpus_path, "w") as corpus:
         for i, line in enumerate(data_file):
             data = json.loads(line)
             text = data["text"]
             sample = random.uniform(0, 1)
 
-            if sample <= config.corpus_ratio:
+            if sample <= corpus_ratio:
                 corpus.write(text)
                 sentence_count += 1
 
@@ -33,9 +33,7 @@ def create_tokenizer_corpus(data_path: Path, config: TokenizerCorpusConfig):
 
 
 def main():
-    config_text = Path("./experiment_settings/corpus.json").read_text()
-    config = TokenizerCorpusConfig.model_validate_json(config_text)
-    create_tokenizer_corpus(Path("./data/training.json"), config)
+    create_tokenizer_corpus()
 
 
 if __name__ == "__main__":

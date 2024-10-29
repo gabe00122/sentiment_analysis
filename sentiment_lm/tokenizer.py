@@ -1,25 +1,28 @@
 import jax
 import tokenmonster
 from jax import numpy as jnp
-from sentiment_lm.constants import SPECIAL_TOKENS, EMPTY_TOKEN
+from sentiment_lm.constants import END_TOKEN, SPECIAL_TOKENS, EMPTY_TOKEN, STAR_TOKENS, START_TOKEN
+import sentencepiece as spm
 
 
 class Tokenizer:
     def __init__(self, vocab_path: str, context_size: int):
-        self.vocab = tokenmonster.Vocab(vocab_path)
+        self.vocab = spm.SentencePieceProcessor(model_file=vocab_path)
         self.context_size = context_size
 
-        self.decoder = self.vocab.decoder()
+    def encode(self, text: str, stars: int|None=None) -> tuple[jax.Array, int]:
+        tokens = self.vocab.encode(text, out_type=int)
 
-    def encode(self, text: str) -> tuple[jax.Array, int]:
-        tokens = list(self.vocab.tokenize(text))
-        length = len(tokens)
+        tokens = [START_TOKEN] + [t + SPECIAL_TOKENS for t in tokens]
+        if stars is not None:
+            tokens += [END_TOKEN, STAR_TOKENS[stars - 1]]
 
-        tokens = [t + SPECIAL_TOKENS for t in tokens]
-        tokens += [EMPTY_TOKEN] * (self.context_size - len(tokens))
-        tokens = jnp.array(tokens, jnp.int16)
+        # pad
+        pad_size = len(tokens)
+        tokens += [EMPTY_TOKEN] * (self.context_size - pad_size)
+        tokens = jnp.array(tokens, jnp.uint16)
 
-        return tokens, length
+        return tokens, pad_size
 
     def decode_context(self, tokens: jax.Array) -> str:
         tokens = tokens - SPECIAL_TOKENS

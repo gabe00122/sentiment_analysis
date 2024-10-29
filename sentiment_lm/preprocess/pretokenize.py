@@ -3,15 +3,18 @@ import numpy as np
 from pathlib import Path
 import json
 
-from sentiment_lm.constants import CONTEXT_SIZE, SPECIAL_TOKENS, EMPTY_TOKEN, END_TOKEN
+from sentiment_lm.constants import SPECIAL_TOKENS, EMPTY_TOKEN, START_TOKEN, STAR_TOKENS
+from sentiment_lm.tokenizer import Tokenizer
 
 
-def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
+def pretokenize(path: str, vocab_file: str, context_size: int = 128):
     input_path = Path(path).absolute()
     output_path = input_path.with_suffix(".npz")
 
     output_tokens = []
     output_length = []
+
+    tokenizer = Tokenizer(vocab_file, context_size)
 
     with open(input_path, "r") as f:
         for i, line in enumerate(f):
@@ -19,17 +22,10 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
             text = data["text"]
             label = data["label"]
 
-            tokens = list(vocab.tokenize(text))
-            if len(tokens) <= max_length - 2:
-                tokens = [token + SPECIAL_TOKENS for token in tokens] + [
-                    END_TOKEN,
-                    label,
-                ]
-                token_length = len(tokens)
-
-                tokens = tokens + ([EMPTY_TOKEN] * (max_length - token_length))
+            tokens, length = tokenizer.encode(text)
+            if length <= context_size:
                 output_tokens.append(tokens)
-                output_length.append(token_length)
+                output_length.append(length)
 
             if i % 10_000 == 9_999:
                 total_reviews = len(output_tokens)
@@ -37,17 +33,16 @@ def pretokenize(path: str | Path, vocab: tokenmonster.Vocab, max_length: int):
                 print(f"{output_path.name} - {total_reviews} - {percentage:.0f}%")
 
     print(f"Saving {input_path.name}")
-    np_tokens = np.array(output_tokens, np.int16)
+    np_tokens = np.array(output_tokens, np.uint16)
     np_length = np.array(output_length, np.uint8)
     np.savez_compressed(output_path, tokens=np_tokens, length=np_length)
 
 
 def main():
-    vocab = tokenmonster.load("./vocab/yelp-32000-consistent-oneword-v1.vocab")
     paths = ["./data/test.json", "./data/training.json", "./data/validation.json"]
 
     for p in paths:
-        pretokenize(p, vocab, CONTEXT_SIZE)
+        pretokenize(p, "./vocab/yelp-16000.model", CONTEXT_SIZE)
 
 
 if __name__ == "__main__":
