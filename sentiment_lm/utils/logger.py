@@ -4,6 +4,7 @@ from pathlib import Path
 import csv
 
 import jax
+from flax import nnx
 import numpy as np
 from pydantic import TypeAdapter
 from tensorboardX import SummaryWriter
@@ -14,8 +15,7 @@ import wandb
 import neptune
 from neptune.utils import stringify_unsupported
 
-
-Metrics = dict[str, jax.Array]
+type Metrics = dict[str, jax.Array | nnx.Metric]
 
 
 class BaseLogger(ABC):
@@ -23,7 +23,7 @@ class BaseLogger(ABC):
     def __init__(self, cfg: ExperimentSettings, unique_token: str):
         pass
 
-    def log_dict(self, data: Metrics, step: int) -> None:
+    def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
         pass
 
     def close(self) -> None:
@@ -34,9 +34,9 @@ class MultiLogger(BaseLogger):
     def __init__(self, loggers: list[BaseLogger]) -> None:
         self.loggers = loggers
 
-    def log_dict(self, data: dict, step: int) -> None:
+    def log_dict(self, data: dict, step: int, event_type: str | None = None) -> None:
         for logger in self.loggers:
-            logger.log_dict(data, step)
+            logger.log_dict(data, step, event_type)
 
     def close(self) -> None:
         for logger in self.loggers:
@@ -60,10 +60,9 @@ class JaxLogger:
 
         self.logger = MultiLogger(loggers)
 
-    def log(self, metrics: Metrics, step: int) -> None:
+    def log(self, metrics: Metrics, step: int, event_type: str | None = None) -> None:
         metrics = jax.tree.map(describe, metrics)
-        # metrics = jax.tree.map(lambda x: x.item(), metrics)
-        self.logger.log_dict(metrics, step)
+        self.logger.log_dict(metrics, step, event_type)
     
     def close(self) -> None:
         self.logger.close()
@@ -77,8 +76,10 @@ class TensorboardLogger(BaseLogger):
         # flattened = flattened_settings(cfg)
         # self.writer.add_hparams(hparam_dict=flattened)
 
-    def log_dict(self, data: Metrics, step: int) -> None:
+    def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
         data = json_normalize(data, sep="/")
+        if event_type is not None:
+            data = {f"{event_type}/{k}": v for k, v in data.items()}
 
         for key, value in data.items():
             self.writer.add_scalar(key, value, step)
@@ -91,8 +92,10 @@ class ConsoleLogger(BaseLogger):
     def __init__(self, cfg: ExperimentSettings, unique_token: str) -> None:
         pass
 
-    def log_dict(self, data: Metrics, step: int) -> None:
+    def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
         data = json_normalize(data, sep=" ")
+        if event_type is not None:
+            data = {f"{event_type}/{k}": v for k, v in data.items()}
 
         keys = data.keys()
         values = []
@@ -116,7 +119,10 @@ class CSVLogger(BaseLogger):
         file = directory / (unique_token + '.csv')
         self.writer = open(file, "w")
 
-    def log_dict(self, data: Metrics, step: int) -> None:
+    def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
+        if event_type is not None:
+            data = {f"{event_type}/{k}": v for k, v in data.items()}
+
         if self.csv_writer is None:
             headers = ['step'] + list(data.keys())
             self.csv_writer = csv.DictWriter(self.writer, fieldnames=headers)
@@ -139,8 +145,10 @@ class NeptuneLogger(BaseLogger):
 
         self.logger['config'] = dump_settings(cfg)
 
-    def log_dict(self, data: Metrics, step: int) -> None:
+    def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
         data = json_normalize(data, sep="/")
+        if event_type is not None:
+            data = {f"{event_type}/{k}": v for k, v in data.items()}
 
         for key, value in data.items():
             self.logger[key].log(value, step=step)
@@ -156,8 +164,10 @@ class WandbLogger(BaseLogger):
             config=dump_settings(cfg)
         )
 
-    def log_dict(self, data: Metrics, step: int) -> None:
+    def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
         data = json_normalize(data, sep="/")
+        if event_type is not None:
+            data = {f"{event_type}/{k}": v for k, v in data.items()}
 
         wandb.log(data, step=step)
 

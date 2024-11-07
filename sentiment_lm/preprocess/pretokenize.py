@@ -1,9 +1,7 @@
-import tokenmonster
 import numpy as np
 from pathlib import Path
 import json
 
-from sentiment_lm.constants import SPECIAL_TOKENS, EMPTY_TOKEN, START_TOKEN, STAR_TOKENS
 from sentiment_lm.tokenizer import Tokenizer
 
 
@@ -36,14 +34,3 @@ def pretokenize(path: str, vocab_file: str, context_size: int = 128):
     np_tokens = np.array(output_tokens, np.uint16)
     np_length = np.array(output_length, np.uint8)
     np.savez_compressed(output_path, tokens=np_tokens, length=np_length)
-
-
-def main():
-    paths = ["./data/test.json", "./data/training.json", "./data/validation.json"]
-
-    for p in paths:
-        pretokenize(p, "./vocab/yelp-16000.model", CONTEXT_SIZE)
-
-
-if __name__ == "__main__":
-    main()

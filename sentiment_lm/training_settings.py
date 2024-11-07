@@ -39,6 +39,7 @@ class ExperimentSettings:
     epochs: int
     batch_size: int
     accumulation_steps: int
+    context_size: int
     vocab: VocabSettings
     optimizer: OptimizerSettings
     model: ModelSettings

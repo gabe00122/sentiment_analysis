@@ -35,11 +35,12 @@ def _get_iso_time():
 class Experiment:
     def __init__(
         self,
-        path: Path,
+        unique_token: str,
         settings: ExperimentSettings,
         metadata: ExperimentMetadata,
     ):
-        self.path = path
+        self.unique_token = unique_token
+        self.path = Path("results") / self.unique_token
         self.settings = settings
         self.metadata = metadata
 
@@ -88,7 +89,7 @@ class Experiment:
         raw_metadata = (path / "metadata.json").read_bytes()
         metadata = ExperimentMetadata.model_validate_json(raw_metadata)
 
-        experiment = cls(path, settings, metadata)
+        experiment = cls(path.name, settings, metadata)
 
         return experiment
 
@@ -97,9 +98,9 @@ class Experiment:
         settings = load_settings(settings_file)
         metadata = _create_metadata()
 
-        experiment_path = _get_experiment_path(settings_file, metadata.start_time)
+        unique_token = _get_unique_token(settings_file, metadata.start_time)
 
-        experiment = cls(experiment_path, settings, metadata)
+        experiment = cls(unique_token, settings, metadata)
         experiment.init_dir()
 
         return experiment
@@ -118,9 +119,8 @@ def load_settings(file: str | Path) -> ExperimentSettings:
     return settings
 
 
-def _get_experiment_path(settings_file: Path, start_time: datetime.datetime) -> Path:
+def _get_unique_token(settings_file: Path, start_time: datetime.datetime) -> str:
     timestamp = start_time.strftime("%Y-%m-%d_%H-%M-%S")
-    experiment_name = f"{settings_file.stem}_{timestamp}"
-    experiment_path = Path("results") / experiment_name
+    token = f"{settings_file.stem}_{timestamp}"
 
-    return experiment_path
+    return token

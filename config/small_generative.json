@@ -3,8 +3,9 @@
     "training_file": "data/training.npz",
     "validation_file": "data/validation.npz",
     "epochs": 3,
-    "batch_size": 32,
+    "batch_size": 1536,
     "accumulation_steps": 48,
+    "context_size": 128,
     "optimizer": {
         "type": "adamw",
         "learning_rate": 0.0012,
@@ -15,9 +16,9 @@
         "weight_decay": 0.1
     },
     "vocab": {
-        "type": "token_monster",
-        "path": "vocab/yelp-32000-consistent-oneword-v1.vocab",
-        "size": 32000
+        "type": "sentencepiece",
+        "path": "vocab/yelp-16000.model",
+        "size": 16000
     },
     "model": {
         "num_layers": 12,
@@ -31,7 +32,8 @@
     },
     "logger": {
         "use_tb": true,
-        "use_neptune": false,
+        "use_csv": true,
+        "use_neptune": true,
         "use_wandb": true
     }
 }

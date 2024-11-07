@@ -5,10 +5,11 @@ import jax
 
 
 class Checkpointer:
-    def __init__(self, directory: str | Path):
+    def __init__(self, directory: str | Path, max_to_keep: int | None = None):
         directory = Path(directory)
         directory = directory.absolute()
-        self.mngr = ocp.CheckpointManager(directory)
+        options = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
+        self.mngr = ocp.CheckpointManager(directory, options=options)
 
     def save(self, model, global_step: int):
         state = nnx.state(model)
