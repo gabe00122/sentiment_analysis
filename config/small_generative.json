@@ -25,10 +25,13 @@
         "d_model": 768,
         "ffn_size": 2048,
         "glu": true,
-        "activation_name": "mish",
-        "attention_softcap": 50,
-        "output_softcap": 30,
+        "activation_name": "silu",
         "dtype": "bfloat16",
         "param_dtype": "float32"
+    },
+    "logger": {
+        "use_tb": true,
+        "use_neptune": false,
+        "use_wandb": true
     }
 }

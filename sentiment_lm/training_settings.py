@@ -1,6 +1,16 @@
+from pydantic import TypeAdapter
 from sentiment_lm.model.transformer_settings import ModelSettings
-from typing import Literal
+from typing import Any, Literal
 from pydantic.dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class LoggerConfig:
+    use_console: bool = True
+    use_tb: bool = False
+    use_csv: bool = False
+    use_wandb: bool = False
+    use_neptune: bool = False
 
 
 @dataclass(frozen=True)
@@ -32,3 +42,4 @@ class ExperimentSettings:
     vocab: VocabSettings
     optimizer: OptimizerSettings
     model: ModelSettings
+    logger: LoggerConfig

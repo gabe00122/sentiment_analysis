@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic.dataclasses import dataclass
 from flax import nnx
@@ -17,8 +17,8 @@ class ModelSettings:
     glu: bool
     dtype: Literal["float32", "bfloat16"]
     param_dtype: Literal["float32", "bfloat16"]
-    attention_softcap: float | None
-    output_softcap: float | None
+    attention_softcap: Optional[float] = None
+    output_softcap: Optional[float] = None
 
     def create_model(self, vocab_size: int, rngs: nnx.Rngs) -> TransformerModel:
         return TransformerModel(

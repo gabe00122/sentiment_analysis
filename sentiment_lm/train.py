@@ -13,7 +13,7 @@ from sentiment_lm.common.dataset_iterator import (
     TrainingData,
     load_training_data,
 )
-from sentiment_lm.common.metrics import TensorboardWriter, Metrics
+from sentiment_lm.utils.logger import TensorboardWriter, Metrics
 from sentiment_lm.experiment import Experiment
 from sentiment_lm.optimizer import create_optimizer
 from sentiment_lm.util import set_flags, count_params
