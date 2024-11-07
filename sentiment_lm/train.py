@@ -119,7 +119,7 @@ def autoregressive_loss(model, tokens, lengths):
     return loss, metrics
 
 
-@partial(nnx.jit, static_argnums=(2, 3, 5), donate_argnums=3)
+@partial(nnx.jit, static_argnums=(2, 3, 5), donate_argnums=4)
 def train_step_accumulate(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, accumulation_steps: int, training_data: TrainingData, training: bool, metrics: nnx.MultiMetric) -> TrainingData:
     return nnx.scan(
         train_step,
@@ -161,13 +161,14 @@ def validate(
 ) -> float:
     steps = validation_data.tokens.shape[0] // batch_size
 
-    output = np.zeros((steps,), dtype=np.float32)
-    for step in range(steps):
-        validation_data, metrics = train_step(
-            optimizer, rngs, batch_size, validation_data, False
+    metrics = create_metrics()
+
+    for _ in range(steps):
+        validation_data = train_step(
+            optimizer, rngs, batch_size, validation_data, False, metrics
         )
 
-    return output.mean().item()
+    return metrics.compute()["accuracy"].item()
 
 
 def create_metrics():
