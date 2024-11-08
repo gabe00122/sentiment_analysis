@@ -23,7 +23,7 @@ def pretokenize(vocab_file: str = "./vocab/yelp-16000.model", context_size: int 
                 text = data["text"]
                 label = data["label"]
 
-                tokens, length = tokenizer.encode(text, int(label) - 1)
+                tokens, length = tokenizer.encode(text, int(label))
                 if length <= context_size:
                     output_tokens.append(tokens)
                     output_length.append(length)

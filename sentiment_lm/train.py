@@ -17,6 +17,7 @@ from sentiment_lm.utils.logger import JaxLogger, Metrics
 from sentiment_lm.experiment import Experiment
 from sentiment_lm.optimizer import create_optimizer
 from sentiment_lm.util import set_flags, count_params
+from sentiment_lm.constants import EMPTY_TOKEN
 
 
 def train(experiment: Experiment):
@@ -52,8 +53,8 @@ def train(experiment: Experiment):
     total_steps = steps * settings.epochs
     checkpoint_rate = total_steps // 10
 
-    validation_rate = total_steps // 100
-    logging_rate = total_steps // 100
+    validation_rate = total_steps // 200
+    logging_rate = total_steps // 200
 
     training_metrics = create_metrics()
     validation_metrics = create_metrics()
@@ -103,7 +104,7 @@ def autoregressive_loss(model, tokens, lengths):
 
     loss = jnp.mean(
         optax.softmax_cross_entropy_with_integer_labels(logit_pred, tokens),
-        where=tokens != -1,
+        where=tokens != EMPTY_TOKEN,
     )
 
     batch_index = jnp.arange(tokens.shape[0])
@@ -116,8 +117,7 @@ def autoregressive_loss(model, tokens, lengths):
 
     # limit it to valid star ratings
     predicted_stars = jnp.argmax(star_logits, axis=-1)
-    percent_correct = jnp.mean(
-        predicted_stars == star_labels, dtype=jnp.float32)
+    percent_correct = jnp.mean(predicted_stars == star_labels, dtype=jnp.float32)
     metrics = {"percent_correct": percent_correct, "loss": loss}
 
     return loss, metrics

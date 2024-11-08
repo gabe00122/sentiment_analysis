@@ -11,16 +11,19 @@ class Tokenizer:
         self.context_size = context_size
 
     def encode(self, text: str, stars: int|None=None) -> tuple[jax.Array, int]:
-        tokens = self.vocab.encode(text, out_type=int)
+        vocab_tokens = self.vocab.encode(text, out_type=int)
 
-        tokens = [START_TOKEN] + [t + SPECIAL_TOKENS for t in tokens]
+        tokens = [START_TOKEN]
+        tokens.extend([t + SPECIAL_TOKENS for t in vocab_tokens])
+
         if stars is not None:
-            tokens += [END_TOKEN, STAR_TOKENS[stars - 1]]
+            tokens.append(END_TOKEN)
+            tokens.append(STAR_TOKENS[stars - 1])
 
         # pad
         pad_size = len(tokens)
-        tokens += [EMPTY_TOKEN] * (self.context_size - pad_size)
-        tokens = jnp.array(tokens, jnp.uint16)
+        tokens.extend([EMPTY_TOKEN] * (self.context_size - pad_size))
+        # tokens = jnp.array(tokens, jnp.uint16)
 
         return tokens, pad_size
 
