@@ -42,7 +42,7 @@ def create_optimizer(
 ) -> nnx.Optimizer:
     model = settings.model.create_model(settings.vocab.size, rngs)
     total_steps = (
-        training_data.tokens.shape[0] // settings.batch_size
+        training_data.tokens.shape[0] // (settings.batch_size // settings.accumulation_steps)
     ) * settings.epochs
     tx = create_optax_optimizer(settings, total_steps)
 

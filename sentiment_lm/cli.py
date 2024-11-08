@@ -2,10 +2,9 @@ from typing import Annotated
 import typer
 
 from pathlib import Path
-from rich.traceback import install
 
 from sentiment_lm import preprocess
-from sentiment_lm.train import train
+from sentiment_lm.train import train as train_fn
 from sentiment_lm.experiment import Experiment
 
 app = typer.Typer()
@@ -28,11 +27,11 @@ def inference(
 def train(settings: str):
     settings_path = Path(settings)
     experiment = Experiment.create_experiment(settings_path)
-    train(experiment)
+    train_fn(experiment)
 
 
 def main():
-    install()
+    # install()
     app()
 
 

@@ -16,7 +16,6 @@
         "weight_decay": 0.1
     },
     "vocab": {
-        "type": "sentencepiece",
         "path": "vocab/yelp-16000.model",
         "size": 16000
     },
@@ -32,7 +31,7 @@
     },
     "logger": {
         "use_tb": true,
-        "use_csv": true,
+        "use_csv": false,
         "use_neptune": true,
         "use_wandb": true
     }

@@ -38,7 +38,6 @@ def train(experiment: Experiment):
     )
 
     samples = training_data.tokens.shape[0]
-    context_size = training_data.tokens.shape[-1]
 
     print(f"Total Samples: {samples}")
 
@@ -51,10 +50,10 @@ def train(experiment: Experiment):
 
     steps = samples // settings.batch_size
     total_steps = steps * settings.epochs
-    checkpoint_rate = 100_000
+    checkpoint_rate = total_steps // 10
 
-    validation_rate = 10
-    logging_rate = 10
+    validation_rate = total_steps // 100
+    logging_rate = total_steps // 100
 
     training_metrics = create_metrics()
     validation_metrics = create_metrics()
@@ -93,6 +92,7 @@ def train(experiment: Experiment):
 
     print("Experiment complete 🎉")
 
+from sentiment_lm.constants import STAR_TOKENS
 
 def autoregressive_loss(model, tokens, lengths):
     segment_position = jnp.arange(tokens.shape[-1], dtype=model.dtype)
@@ -107,27 +107,31 @@ def autoregressive_loss(model, tokens, lengths):
     )
 
     batch_index = jnp.arange(tokens.shape[0])
-    star_logits = logit_pred[batch_index, lengths - 2, 1:6]
-    star_labels = tokens[batch_index, lengths - 2] - 1
+
+    first_star = STAR_TOKENS[0]
+    last_star = STAR_TOKENS[-1]
+
+    star_logits = logit_pred[batch_index, lengths - 2, first_star:last_star]
+    star_labels = tokens[batch_index, lengths - 2] - first_star
 
     # limit it to valid star ratings
     predicted_stars = jnp.argmax(star_logits, axis=-1)
     percent_correct = jnp.mean(
         predicted_stars == star_labels, dtype=jnp.float32)
-    metrics = {"accuracy": percent_correct, "loss": loss}
+    metrics = {"percent_correct": percent_correct, "loss": loss}
 
     return loss, metrics
 
 
-@partial(nnx.jit, static_argnums=(2, 3, 5), donate_argnums=4)
 def train_step_accumulate(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, accumulation_steps: int, training_data: TrainingData, training: bool, metrics: nnx.MultiMetric) -> TrainingData:
-    return nnx.scan(
-        train_step,
-        length=accumulation_steps,
-    )(optimizer, rngs, batch_size // accumulation_steps, training_data, training, metrics)
+    # this could probably use jax.scan and be jitted
+    for _ in range(accumulation_steps):
+        training_data = train_step(optimizer, rngs, batch_size//accumulation_steps, training_data, training, metrics)
+    
+    return training_data
 
 
-# @partial(nnx.jit, static_argnums=(2, 4), donate_argnums=3)
+@partial(nnx.jit, static_argnums=(2, 4), donate_argnums=3)
 def train_step(
     optimizer: nnx.Optimizer,
     rngs: nnx.Rngs,
@@ -174,5 +178,5 @@ def validate(
 def create_metrics():
     return nnx.MultiMetric(
         loss=nnx.metrics.Average('loss'),
-        accuracy=nnx.metrics.Accuracy(),
+        percent_correct=nnx.metrics.Average('percent_correct'),
     )

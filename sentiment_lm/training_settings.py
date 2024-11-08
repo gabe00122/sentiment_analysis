@@ -15,7 +15,6 @@ class LoggerConfig:
 
 @dataclass(frozen=True)
 class VocabSettings:
-    type: Literal["token_monster"]
     path: str
     size: int
 
