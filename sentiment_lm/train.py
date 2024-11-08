@@ -34,8 +34,7 @@ def train(experiment: Experiment):
     init_rngs = nnx.Rngs(init_key)
     rngs = nnx.Rngs(train_key)
 
-    training_data = load_training_data(
-        settings.training_file, training_shuffle_key)
+    training_data = load_training_data(settings.training_file, training_shuffle_key)
     validation_data = load_training_data(
         settings.validation_file, validation_shuffle_key
     )
@@ -63,12 +62,24 @@ def train(experiment: Experiment):
 
     for global_step in range(total_steps):
         training_data = train_step_accumulate(
-            optimizer, rngs, settings.batch_size, settings.accumulation_steps, training_data, True, training_metrics
+            optimizer,
+            rngs,
+            settings.batch_size,
+            settings.accumulation_steps,
+            training_data,
+            True,
+            training_metrics,
         )
 
         if global_step % validation_rate == validation_rate - 1:
             validation_data = train_step_accumulate(
-                optimizer, rngs, settings.batch_size, settings.accumulation_steps, validation_data, False, validation_metrics
+                optimizer,
+                rngs,
+                settings.batch_size,
+                settings.accumulation_steps,
+                validation_data,
+                False,
+                validation_metrics,
             )
             writer.log(validation_metrics.compute(), global_step, "validation")
             validation_metrics.reset()
@@ -95,7 +106,9 @@ def train(experiment: Experiment):
 
     print("Experiment complete 🎉")
 
+
 from sentiment_lm.constants import STAR_TOKENS
+
 
 def autoregressive_loss(model, tokens, lengths):
     segment_position = jnp.arange(tokens.shape[-1], dtype=model.dtype)
@@ -114,7 +127,7 @@ def autoregressive_loss(model, tokens, lengths):
     first_star = STAR_TOKENS[0]
     last_star = STAR_TOKENS[-1]
 
-    star_logits = logit_pred[batch_index, lengths - 2, first_star:last_star+1]
+    star_logits = logit_pred[batch_index, lengths - 2, first_star : last_star + 1]
     star_labels = tokens[batch_index, lengths - 2] - first_star
 
     # limit it to valid star ratings
@@ -125,11 +138,26 @@ def autoregressive_loss(model, tokens, lengths):
     return loss, metrics
 
 
-def train_step_accumulate(optimizer: nnx.Optimizer, rngs: nnx.Rngs, batch_size: int, accumulation_steps: int, training_data: TrainingData, training: bool, metrics: nnx.MultiMetric) -> TrainingData:
+def train_step_accumulate(
+    optimizer: nnx.Optimizer,
+    rngs: nnx.Rngs,
+    batch_size: int,
+    accumulation_steps: int,
+    training_data: TrainingData,
+    training: bool,
+    metrics: nnx.MultiMetric,
+) -> TrainingData:
     # this could probably use jax.scan and be jitted
     for _ in range(accumulation_steps):
-        training_data = train_step(optimizer, rngs, batch_size//accumulation_steps, training_data, training, metrics)
-    
+        training_data = train_step(
+            optimizer,
+            rngs,
+            batch_size // accumulation_steps,
+            training_data,
+            training,
+            metrics,
+        )
+
     return training_data
 
 
@@ -179,6 +207,6 @@ def validate(
 
 def create_metrics():
     return nnx.MultiMetric(
-        loss=nnx.metrics.Average('loss'),
-        percent_correct=nnx.metrics.Average('percent_correct'),
+        loss=nnx.metrics.Average("loss"),
+        percent_correct=nnx.metrics.Average("percent_correct"),
     )

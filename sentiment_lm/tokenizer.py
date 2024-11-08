@@ -1,7 +1,13 @@
 import jax
 import tokenmonster
 from jax import numpy as jnp
-from sentiment_lm.constants import END_TOKEN, SPECIAL_TOKENS, EMPTY_TOKEN, STAR_TOKENS, START_TOKEN
+from sentiment_lm.constants import (
+    END_TOKEN,
+    SPECIAL_TOKENS,
+    EMPTY_TOKEN,
+    STAR_TOKENS,
+    START_TOKEN,
+)
 import sentencepiece as spm
 
 
@@ -10,7 +16,7 @@ class Tokenizer:
         self.vocab = spm.SentencePieceProcessor(model_file=vocab_path)
         self.context_size = context_size
 
-    def encode(self, text: str, stars: int|None=None) -> tuple[list[int], int]:
+    def encode(self, text: str, stars: int | None = None) -> tuple[list[int], int]:
         vocab_tokens = self.vocab.Encode(text, out_type=int)
 
         tokens = [START_TOKEN]
@@ -36,6 +42,6 @@ class Tokenizer:
         int_token: int = token.item()
         int_token -= SPECIAL_TOKENS
 
-        piece = self.vocab.IdToPiece(int_token).replace('▁', ' ')
+        piece = self.vocab.IdToPiece(int_token).replace("▁", " ")
 
         return piece

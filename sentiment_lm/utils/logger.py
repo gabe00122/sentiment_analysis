@@ -63,7 +63,7 @@ class JaxLogger:
     def log(self, metrics: Metrics, step: int, event_type: str | None = None) -> None:
         metrics = jax.tree.map(describe, metrics)
         self.logger.log_dict(metrics, step, event_type)
-    
+
     def close(self) -> None:
         self.logger.close()
 
@@ -72,7 +72,7 @@ class TensorboardLogger(BaseLogger):
     def __init__(self, cfg: ExperimentSettings, unique_token: str) -> None:
         log_path = Path("./logs/tensorboard") / unique_token
         self.writer = SummaryWriter(log_path.as_posix())
-        
+
         # flattened = flattened_settings(cfg)
         # self.writer.add_hparams(hparam_dict=flattened)
 
@@ -113,10 +113,10 @@ class CSVLogger(BaseLogger):
     csv_writer: csv.DictWriter | None = None
 
     def __init__(self, cfg: ExperimentSettings, unique_token: str) -> None:
-        directory =  Path("./logs/csv")
+        directory = Path("./logs/csv")
         os.makedirs(directory, exist_ok=True)
 
-        file = directory / (unique_token + '.csv')
+        file = directory / (unique_token + ".csv")
         self.writer = open(file, "w")
 
     def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
@@ -124,15 +124,15 @@ class CSVLogger(BaseLogger):
             data = {f"{event_type}/{k}": v for k, v in data.items()}
 
         if self.csv_writer is None:
-            headers = ['step'] + list(data.keys())
+            headers = ["step"] + list(data.keys())
             self.csv_writer = csv.DictWriter(self.writer, fieldnames=headers)
             self.csv_writer.writeheader()
 
-        row = {'step': step}
+        row = {"step": step}
         row.update(data)
 
         self.csv_writer.writerow(row)
-    
+
     def close(self) -> None:
         self.writer.close()
 
@@ -143,7 +143,7 @@ class NeptuneLogger(BaseLogger):
             project="gabe00122/sentiment-lm",
         )
 
-        self.logger['config'] = dump_settings(cfg)
+        self.logger["config"] = dump_settings(cfg)
 
     def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
         data = json_normalize(data, sep="/")
@@ -152,17 +152,14 @@ class NeptuneLogger(BaseLogger):
 
         for key, value in data.items():
             self.logger[key].log(value, step=step)
-        
+
     def close(self) -> None:
         self.logger.stop()
 
 
 class WandbLogger(BaseLogger):
     def __init__(self, cfg: ExperimentSettings, unique_token: str):
-        wandb.init(
-            project='sentiment_lm',
-            config=dump_settings(cfg)
-        )
+        wandb.init(project="sentiment_lm", config=dump_settings(cfg))
 
     def log_dict(self, data: Metrics, step: int, event_type: str | None = None) -> None:
         data = json_normalize(data, sep="/")

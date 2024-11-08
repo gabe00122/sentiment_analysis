@@ -17,6 +17,7 @@ def set_flags():
         # "--xla_gpu_enable_address_computation_fusion=true "
     )
 
+
 # Taken from pandas
 def _normalise_json(
     data: Any,

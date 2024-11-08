@@ -5,7 +5,6 @@ from jax import numpy as jnp, random
 
 from rich.console import Console
 from rich.prompt import Prompt
-import rich.table
 
 from sentiment_lm.experiment import Experiment
 from sentiment_lm.tokenizer import Tokenizer

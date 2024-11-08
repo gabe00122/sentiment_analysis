@@ -7,7 +7,7 @@ from sentiment_lm.tokenizer import Tokenizer
 
 def pretokenize(vocab_file: str = "./vocab/yelp-16000.model", context_size: int = 128):
     tokenizer = Tokenizer(vocab_file, context_size)
-    files = ['test.json', 'training.json', 'validation.json']
+    files = ["test.json", "training.json", "validation.json"]
     data_folder = Path("./data")
 
     for file in files:
