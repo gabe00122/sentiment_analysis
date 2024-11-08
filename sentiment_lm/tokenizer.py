@@ -10,8 +10,8 @@ class Tokenizer:
         self.vocab = spm.SentencePieceProcessor(model_file=vocab_path)
         self.context_size = context_size
 
-    def encode(self, text: str, stars: int|None=None) -> tuple[jax.Array, int]:
-        vocab_tokens = self.vocab.encode(text, out_type=int)
+    def encode(self, text: str, stars: int|None=None) -> tuple[list[int], int]:
+        vocab_tokens = self.vocab.Encode(text, out_type=int)
 
         tokens = [START_TOKEN]
         tokens.extend([t + SPECIAL_TOKENS for t in vocab_tokens])
@@ -23,7 +23,6 @@ class Tokenizer:
         # pad
         pad_size = len(tokens)
         tokens.extend([EMPTY_TOKEN] * (self.context_size - pad_size))
-        # tokens = jnp.array(tokens, jnp.uint16)
 
         return tokens, pad_size
 
@@ -31,9 +30,12 @@ class Tokenizer:
         tokens = tokens - SPECIAL_TOKENS
         tokens_list = tokens.tolist()
         tokens_list = [x for x in tokens_list if x >= 0]
-        return self.vocab.decode(tokens_list)
+        return self.vocab.DecodeIds(tokens_list)
 
     def decode_token(self, token: jax.Array) -> str:
         int_token: int = token.item()
         int_token -= SPECIAL_TOKENS
-        return self.decoder.decode(int_token)
+
+        piece = self.vocab.IdToPiece(int_token).replace('▁', ' ')
+
+        return piece

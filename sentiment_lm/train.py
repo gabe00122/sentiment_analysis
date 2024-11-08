@@ -19,6 +19,8 @@ from sentiment_lm.optimizer import create_optimizer
 from sentiment_lm.util import set_flags, count_params
 from sentiment_lm.constants import EMPTY_TOKEN
 
+import jax
+
 
 def train(experiment: Experiment):
     set_flags()
@@ -112,7 +114,7 @@ def autoregressive_loss(model, tokens, lengths):
     first_star = STAR_TOKENS[0]
     last_star = STAR_TOKENS[-1]
 
-    star_logits = logit_pred[batch_index, lengths - 2, first_star:last_star]
+    star_logits = logit_pred[batch_index, lengths - 2, first_star:last_star+1]
     star_labels = tokens[batch_index, lengths - 2] - first_star
 
     # limit it to valid star ratings
