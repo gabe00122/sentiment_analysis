@@ -2387,16 +2387,6 @@ ml-dtypes = ">=0.3.1"
 numpy = ">=1.22.0"
 
 [[package]]
-name = "tokenmonster"
-version = "1.1.12"
-description = "Tokenize and decode text with TokenMonster vocabularies."
-optional = false
-python-versions = "*"
-files = [
-    {file = "tokenmonster-1.1.12.tar.gz", hash = "sha256:b4b12348b193ef6d765ba4b9f4de7b679ac6faa438fbc7d0b308b3be581974bb"},
-]
-
-[[package]]
 name = "toolz"
 version = "1.0.0"
 description = "List processing tools and functional utilities"
@@ -2586,4 +2576,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "f814b9c7d2a991a509918042eb600c11978e7249de8bad4633cc7d0d7b5331e9"
+content-hash = "25f4f91ece645f3c00c20deafa2929fbb821f7ba1b7041c560caa86cfd0ea0fd"
