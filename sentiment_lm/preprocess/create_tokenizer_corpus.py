@@ -3,11 +3,11 @@ from pathlib import Path
 import json
 
 data_path = "./data/training.json"
-corpus_path = "./data/corpus.txt"
+corpus_path = "./data/tokenizer_corpus.txt"
 
 
 def create_tokenizer_corpus(
-    corpus_ratio: float = 0.1,
+    corpus_ratio: float = 0.4,
     seed: int = 42,
 ):
     random.seed(seed)

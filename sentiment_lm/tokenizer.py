@@ -42,6 +42,9 @@ class Tokenizer:
         int_token: int = token.item()
         int_token -= SPECIAL_TOKENS
 
-        piece = self.vocab.IdToPiece(int_token).replace("▁", " ")
+        piece: str = self.vocab.IdToPiece(int_token)
+        text = self.vocab.DecodeIds(int_token)
+        if piece.startswith('▁'):
+            text = ' ' + text
 
-        return piece
+        return text
