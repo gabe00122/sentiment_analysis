@@ -16,8 +16,8 @@
         "weight_decay": 0.1
     },
     "vocab": {
-        "path": "vocab/yelp-16000.model",
-        "size": 16000
+        "path": "vocab/yelp-32000.model",
+        "size": 32000
     },
     "model": {
         "num_layers": 12,
